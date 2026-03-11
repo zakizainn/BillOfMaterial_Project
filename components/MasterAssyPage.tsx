@@ -16,7 +16,6 @@ function downloadTemplate() {
   XLSX.writeFile(wb, 'template_master_assy.xlsx');
 }
 
-// ─── Upload Modal ─────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onSuccess, showToast }: {
   onClose: () => void; onSuccess: () => void;
   showToast: (msg: string, type: 'success' | 'error') => void;
@@ -66,7 +65,6 @@ function UploadModal({ onClose, onSuccess, showToast }: {
 
   return (
     <Modal title="Upload Excel — Master ASSY" onClose={onClose} wide>
-      {/* Step 1 */}
       <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '14px 18px', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <span style={{ fontSize: 16 }}>📥</span>
@@ -75,63 +73,42 @@ function UploadModal({ onClose, onSuccess, showToast }: {
         <p style={{ fontSize: 12.5, color: '#0c4a6e', marginBottom: 12, fontFamily: font }}>Download template Excel, isi data sesuai format, lalu upload.</p>
         <BtnGhost onClick={downloadTemplate} color="teal">⬇ Download Template Master ASSY</BtnGhost>
       </div>
-
-      {/* Step 2 */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <span style={{ fontSize: 16 }}>📤</span>
           <span style={{ fontWeight: 600, fontSize: 13.5, color: '#111827', fontFamily: font }}>Step 2 — Pilih File Excel</span>
         </div>
-        <div onClick={() => fileRef.current?.click()} style={{
-          border: `2px dashed ${fileName ? '#86efac' : '#cbd5e1'}`,
-          borderRadius: 12, padding: '32px 20px', textAlign: 'center', cursor: 'pointer',
-          background: fileName ? '#f0fdf4' : '#f8fafc',
-          transition: 'all .15s',
-        }}
-        onMouseOver={e => { if (!fileName) { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#eff6ff'; }}}
-        onMouseOut={e =>  { if (!fileName) { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f8fafc'; }}}
-        >
+        <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${fileName ? '#86efac' : '#cbd5e1'}`, borderRadius: 12, padding: '32px 20px', textAlign: 'center', cursor: 'pointer', background: fileName ? '#f0fdf4' : '#f8fafc', transition: 'all .15s' }}
+          onMouseOver={e => { if (!fileName) { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#eff6ff'; }}}
+          onMouseOut={e =>  { if (!fileName) { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f8fafc'; }}}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
-          <p style={{ fontSize: 13.5, fontWeight: 600, color: fileName ? '#16a34a' : '#6b7280', fontFamily: font, marginBottom: 4 }}>
-            {fileName ? `✓ ${fileName}` : 'Klik untuk pilih file .xlsx'}
-          </p>
+          <p style={{ fontSize: 13.5, fontWeight: 600, color: fileName ? '#16a34a' : '#6b7280', fontFamily: font, marginBottom: 4 }}>{fileName ? `✓ ${fileName}` : 'Klik untuk pilih file .xlsx'}</p>
           <p style={{ fontSize: 12, color: '#9ca3af', fontFamily: font }}>Format: .xlsx — Maks 1000 baris</p>
         </div>
         <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ display: 'none' }} />
       </div>
-
-      {/* Errors */}
       {errors.length > 0 && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
           <p style={{ fontWeight: 700, color: '#dc2626', fontSize: 12, marginBottom: 6, fontFamily: font }}>⚠ Ditemukan Error:</p>
           {errors.map((e, i) => <p key={i} style={{ fontSize: 12, color: '#dc2626', fontFamily: font }}>• {e}</p>)}
         </div>
       )}
-
-      {/* Preview */}
       {preview && (
         <div style={{ marginBottom: 20 }}>
           <p style={{ fontWeight: 600, fontSize: 13.5, color: '#111827', marginBottom: 10, fontFamily: font }}>👁 Preview Data ({preview.length} baris)</p>
           <div style={{ maxHeight: 260, overflowY: 'auto', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-            <Table
-              headers={[{label:'Assy Code'},{label:'No Urut'},{label:'Prod Qty'},{label:'Deskripsi'},{label:'Status'}]}
-              rows={preview.map(r => [r.assy_code, r.assy_number, r.prod_qty ?? '—', r.description || '—', <Badge active={!!r.is_active} />])}
-            />
+            <Table headers={[{label:'Assy Code'},{label:'No Urut'},{label:'Prod Qty'},{label:'Deskripsi'},{label:'Status'}]} rows={preview.map(r => [r.assy_code, r.assy_number, r.prod_qty ?? '—', r.description || '—', <Badge active={!!r.is_active} />])} />
           </div>
         </div>
       )}
-
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 4 }}>
         <BtnGhost onClick={onClose} color="gray">Batal</BtnGhost>
-        <BtnPrimary onClick={handleUpload} disabled={!preview || loading}>
-          {loading ? 'Mengupload...' : `Upload ${preview ? preview.length + ' Data' : ''}`}
-        </BtnPrimary>
+        <BtnPrimary onClick={handleUpload} disabled={!preview || loading}>{loading ? 'Mengupload...' : `Upload ${preview ? preview.length + ' Data' : ''}`}</BtnPrimary>
       </div>
     </Modal>
   );
 }
 
-// ─── Assy Form ────────────────────────────────────────────────────────────────
 function AssyForm({ initial, onSave, onClose, existingCodes }: {
   initial?: Assy; onSave: (f: Partial<Assy>) => void;
   onClose: () => void; existingCodes: string[];
@@ -165,22 +142,12 @@ function AssyForm({ initial, onSave, onClose, existingCodes }: {
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <Field label="Assy Code" required error={errors.assy_code}>
-          <Input value={form.assy_code} onChange={e => set('assy_code', e.target.value)} placeholder="e.g. ASSY 1" disabled={editing} />
-        </Field>
-        <Field label="Nomor Urut" required error={errors.assy_number}>
-          <Input type="number" value={form.assy_number} onChange={e => set('assy_number', e.target.value)} placeholder="1" />
-        </Field>
+        <Field label="Assy Code" required error={errors.assy_code}><Input value={form.assy_code} onChange={e => set('assy_code', e.target.value)} placeholder="e.g. ASSY 1" disabled={editing} /></Field>
+        <Field label="Nomor Urut" required error={errors.assy_number}><Input type="number" value={form.assy_number} onChange={e => set('assy_number', e.target.value)} placeholder="1" /></Field>
       </div>
-      <Field label="Production Qty" error={errors.prod_qty}>
-        <Input type="number" value={form.prod_qty} onChange={e => set('prod_qty', e.target.value)} placeholder="e.g. 399" />
-      </Field>
-      <Field label="Description">
-        <Input value={form.description ?? ''} onChange={e => set('description', e.target.value)} placeholder="Deskripsi (opsional)" />
-      </Field>
-      <Field label="Status">
-        <Select value={form.is_active ? 'active' : 'inactive'} onChange={e => set('is_active', e.target.value === 'active')} options={['active','inactive']} />
-      </Field>
+      <Field label="Production Qty" error={errors.prod_qty}><Input type="number" value={form.prod_qty} onChange={e => set('prod_qty', e.target.value)} placeholder="e.g. 399" /></Field>
+      <Field label="Description"><Input value={form.description ?? ''} onChange={e => set('description', e.target.value)} placeholder="Deskripsi (opsional)" /></Field>
+      <Field label="Status"><Select value={form.is_active ? 'active' : 'inactive'} onChange={e => set('is_active', e.target.value === 'active')} options={['active','inactive']} /></Field>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
         <BtnGhost onClick={onClose} color="gray">Batal</BtnGhost>
         <BtnPrimary onClick={handleSave}>{editing ? 'Simpan Perubahan' : 'Tambah ASSY'}</BtnPrimary>
@@ -189,8 +156,13 @@ function AssyForm({ initial, onSave, onClose, existingCodes }: {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-export default function MasterAssyPage({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
+export default function MasterAssyPage({ showToast, role }: {
+  showToast: (msg: string, type: 'success' | 'error') => void;
+  role: string;
+}) {
+  const canEdit   = role === 'PPC';     // tambah & edit
+  const canDelete = role === 'FINANCE'; // hapus
+
   const [data, setData]             = useState<Assy[]>([]);
   const [loading, setLoading]       = useState(true);
   const [modal, setModal]           = useState<null | 'add' | { editing: Assy }>(null);
@@ -207,7 +179,7 @@ export default function MasterAssyPage({ showToast }: { showToast: (msg: string,
   };
   useEffect(() => { fetchData(); }, []);
 
-  const filtered  = data.filter(r => r.assy_code.toLowerCase().includes(search.toLowerCase()) || (r.description ?? '').toLowerCase().includes(search.toLowerCase()));
+  const filtered  = data.filter(r => (r.assy_code ?? '').toLowerCase().includes(search.toLowerCase()) || (r.description ?? '').toLowerCase().includes(search.toLowerCase()));
   const paginated = filtered.slice((page-1)*perPage, page*perPage);
 
   const handleAdd = async (form: Partial<Assy>) => {
@@ -233,20 +205,44 @@ export default function MasterAssyPage({ showToast }: { showToast: (msg: string,
     } catch { showToast('Gagal menghapus ASSY', 'error'); }
   };
 
+  // Bangun kolom aksi berdasarkan role
+  const renderAksi = (r: Assy) => {
+    if (canEdit && canDelete) {
+      // tidak ada role yang punya keduanya, tapi jaga-jaga
+      return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setModal({ editing: r })} color="blue">Edit</BtnGhost><BtnGhost onClick={() => setConfirm(r.id)} color="red">Hapus</BtnGhost></div>;
+    }
+    if (canEdit) {
+      return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setModal({ editing: r })} color="blue">Edit</BtnGhost></div>;
+    }
+    if (canDelete) {
+      return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setConfirm(r.id)} color="red">Hapus</BtnGhost></div>;
+    }
+    return <span style={{ fontSize: 11.5, color: '#9ca3af', fontStyle: 'italic' }}>View only</span>;
+  };
+
   const tableRows = paginated.map(r => [
     <span style={{ fontWeight: 600, color: '#1d4ed8', fontFamily: 'monospace', fontSize: 13 }}>{r.assy_code}</span>,
     <span style={{ color: '#4b5563' }}>{r.assy_number}</span>,
     <span style={{ fontWeight: 500 }}>{r.prod_qty != null ? Number(r.prod_qty).toLocaleString() : <span style={{ color: '#9ca3af' }}>—</span>}</span>,
     r.description ? <span style={{ color: '#4b5563' }}>{r.description}</span> : <span style={{ color: '#d1d5db' }}>—</span>,
     <Badge active={r.is_active} />,
-    <div style={{ display: 'flex', gap: 6 }}>
-      <BtnGhost onClick={() => setModal({ editing: r })} color="blue">Edit</BtnGhost>
-      <BtnGhost onClick={() => setConfirm(r.id)} color="red">Hapus</BtnGhost>
-    </div>,
+    renderAksi(r),
   ]);
+
+  // Role badge info
+  const roleBanner = () => {
+    if (canEdit)   return { bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d', icon: '✏️', text: `Role <b>PPC</b> — dapat menambah dan mengedit data ASSY. Penghapusan hanya bisa dilakukan oleh Finance.` };
+    if (canDelete) return { bg: '#fef2f2', border: '#fecaca', color: '#dc2626', icon: '🗑', text: `Role <b>FINANCE</b> — memiliki akses hapus data. Penambahan dan pengeditan hanya bisa dilakukan oleh PPC.` };
+    return { bg: '#fffbeb', border: '#fde68a', color: '#92400e', icon: '👁', text: `Role <b>${role}</b> — hanya dapat melihat data ini.` };
+  };
+  const banner = roleBanner();
 
   return (
     <div style={{ fontFamily: font }}>
+      {/* Role banner */}
+      <div style={{ background: banner.bg, border: `1px solid ${banner.border}`, borderRadius: 10, padding: '10px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: banner.color }}
+        dangerouslySetInnerHTML={{ __html: `${banner.icon} ${banner.text}` }} />
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div>
@@ -256,16 +252,17 @@ export default function MasterAssyPage({ showToast }: { showToast: (msg: string,
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: 14 }}>🔍</span>
-            <input
-              value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Cari assy code / deskripsi..."
+            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Cari assy code / deskripsi..."
               style={{ padding: '9px 12px 9px 34px', borderRadius: 8, border: '1.5px solid #e2e8f0', fontSize: 13, fontFamily: font, outline: 'none', width: 240, background: '#fff', color: '#111827' }}
               onFocus={e => { e.target.style.borderColor = '#3b82f6'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,.1)'; }}
-              onBlur={e =>  { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; }}
-            />
+              onBlur={e =>  { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; }} />
           </div>
-          <BtnGhost onClick={() => setShowUpload(true)} color="teal">📤 Upload Excel</BtnGhost>
-          <BtnPrimary onClick={() => setModal('add')}>+ Tambah ASSY</BtnPrimary>
+          {canEdit && (
+            <>
+              <BtnGhost onClick={() => setShowUpload(true)} color="teal">📤 Upload Excel</BtnGhost>
+              <BtnPrimary onClick={() => setModal('add')}>+ Tambah ASSY</BtnPrimary>
+            </>
+          )}
         </div>
       </div>
 
@@ -279,18 +276,15 @@ export default function MasterAssyPage({ showToast }: { showToast: (msg: string,
       {/* Table */}
       {loading ? <LoadingSpinner /> : (
         <>
-          <Table
-            headers={[{label:'Assy Code'},{label:'No Urut'},{label:'Prod Qty',right:true},{label:'Deskripsi'},{label:'Status'},{label:'Aksi'}]}
-            rows={tableRows}
-          />
+          <Table headers={[{label:'Assy Code'},{label:'No Urut'},{label:'Prod Qty',right:true},{label:'Deskripsi'},{label:'Status'},{label:'Aksi'}]} rows={tableRows} />
           <Pagination total={filtered.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} />
         </>
       )}
 
-      {modal === 'add' && <Modal title="Tambah ASSY Baru" onClose={() => setModal(null)}><AssyForm onSave={handleAdd} onClose={() => setModal(null)} existingCodes={data.map(r => r.assy_code)} /></Modal>}
-      {modal && typeof modal === 'object' && 'editing' in modal && <Modal title={`Edit — ${modal.editing.assy_code}`} onClose={() => setModal(null)}><AssyForm initial={modal.editing} onSave={handleEdit} onClose={() => setModal(null)} existingCodes={data.map(r => r.assy_code)} /></Modal>}
-      {confirm !== null && <ConfirmDialog msg={`Yakin ingin menghapus ${data.find(r => r.id === confirm)?.assy_code}? Data yang dihapus tidak dapat dikembalikan.`} onConfirm={() => handleDelete(confirm)} onCancel={() => setConfirm(null)} />}
-      {showUpload && <UploadModal onClose={() => setShowUpload(false)} onSuccess={fetchData} showToast={showToast} />}
+      {canEdit && modal === 'add' && <Modal title="Tambah ASSY Baru" onClose={() => setModal(null)}><AssyForm onSave={handleAdd} onClose={() => setModal(null)} existingCodes={data.map(r => r.assy_code)} /></Modal>}
+      {canEdit && modal && typeof modal === 'object' && 'editing' in modal && <Modal title={`Edit — ${modal.editing.assy_code}`} onClose={() => setModal(null)}><AssyForm initial={modal.editing} onSave={handleEdit} onClose={() => setModal(null)} existingCodes={data.map(r => r.assy_code)} /></Modal>}
+      {canDelete && confirm !== null && <ConfirmDialog msg={`Yakin ingin menghapus ${data.find(r => r.id === confirm)?.assy_code}? Data yang dihapus tidak dapat dikembalikan.`} onConfirm={() => handleDelete(confirm)} onCancel={() => setConfirm(null)} />}
+      {canEdit && showUpload && <UploadModal onClose={() => setShowUpload(false)} onSuccess={fetchData} showToast={showToast} />}
     </div>
   );
 }
