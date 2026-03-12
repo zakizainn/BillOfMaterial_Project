@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import BomDetailModal from '@/components/BomDetailModal';
+import BomGabunganModal from '@/components/BomGabunganModal';
 import * as XLSX from 'xlsx';
 import { BtnPrimary, BtnGhost, ConfirmDialog, LoadingSpinner, Table, Modal } from '@/components/ui';
 
@@ -286,6 +288,8 @@ export default function MasterBomPage({ showToast, role }: {
   const [loading, setLoading]       = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [confirm, setConfirm]       = useState<string | null>(null);
+  const [detailPeriode, setDetailPeriode] = useState<string | null>(null);
+  const [showGabungan, setShowGabungan]   = useState(false);
 
   const fetchData = () => {
     setLoading(true);
@@ -316,9 +320,10 @@ export default function MasterBomPage({ showToast, role }: {
     <span style={{ fontWeight: 600, color: '#374151' }}>{Number(p.total_assy).toLocaleString()}</span>,
     <span style={{ fontWeight: 600, color: '#374151' }}>{Number(p.total_rows).toLocaleString()}</span>,
     <span style={{ fontSize: 12, color: '#6b7280' }}>{new Date(p.uploaded_at).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>,
-    canDelete
-      ? <BtnGhost onClick={() => setConfirm(p.periode)} color="red">🗑 Hapus</BtnGhost>
-      : <span style={{ fontSize: 11.5, color: '#9ca3af', fontStyle: 'italic' }}>View only</span>,
+    <div style={{ display: 'flex', gap: 6 }}>
+      <BtnGhost onClick={() => setDetailPeriode(p.periode)} color="blue">👁 Detail</BtnGhost>
+      {canDelete && <BtnGhost onClick={() => setConfirm(p.periode)} color="red">🗑 Hapus</BtnGhost>}
+    </div>,
   ]);
 
   const roleBanner = () => {
@@ -340,9 +345,16 @@ export default function MasterBomPage({ showToast, role }: {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111827', margin: 0 }}>Master BOM</h1>
           <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Bill of Materials — <b style={{ color: '#374151' }}>{periodes.length}</b> periode tersedia</p>
         </div>
-        {canUpload && (
-          <BtnPrimary onClick={() => setShowUpload(true)}>📤 Upload BOM Excel</BtnPrimary>
-        )}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={() => setShowGabungan(true)} style={{
+            padding: '9px 18px', borderRadius: 10, border: '1.5px solid #16a34a',
+            background: '#f0fdf4', color: '#15803d', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', gap: 7,
+          }}>📊 Lihat Gabungan</button>
+          {canUpload && (
+            <BtnPrimary onClick={() => setShowUpload(true)}>📤 Upload BOM Excel</BtnPrimary>
+          )}
+        </div>
       </div>
 
       {/* Warning box upload rule */}
@@ -389,6 +401,8 @@ export default function MasterBomPage({ showToast, role }: {
       )}
 
       {showUpload && <UploadModal onClose={() => setShowUpload(false)} onSuccess={fetchData} showToast={showToast} />}
+      {detailPeriode && <BomDetailModal periode={detailPeriode} onClose={() => setDetailPeriode(null)} />}
+      {showGabungan && <BomGabunganModal onClose={() => setShowGabungan(false)} availablePeriodes={periodes.map(p => p.periode).reverse()} />}
       {confirm && (
         <ConfirmDialog
           msg={`Yakin ingin menghapus BOM periode ${formatPeriode(confirm)}? Semua data BOM periode ini akan dihapus. Part dan ASSY yang tidak digunakan di periode lain juga akan ikut dihapus dari master.`}

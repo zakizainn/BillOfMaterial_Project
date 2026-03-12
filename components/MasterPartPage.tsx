@@ -175,7 +175,8 @@ export default function MasterPartPage({ showToast, role }: {
   const [data, setData]             = useState<Part[]>([]);
   const [loading, setLoading]       = useState(true);
   const [modal, setModal]           = useState<null | 'add' | { editing: Part }>(null);
-  const [confirm, setConfirm]       = useState<number | null>(null);
+  const [selected, setSelected]       = useState<Set<number>>(new Set());
+  const [confirmBulk, setConfirmBulk] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [search, setSearch]         = useState('');
   const [filterUnit, setFilterUnit] = useState('ALL');
@@ -212,24 +213,30 @@ export default function MasterPartPage({ showToast, role }: {
     } catch { showToast('Gagal memperbarui Part', 'error'); }
   };
 
-  const handleDelete = async (id: number) => {
+
+
+  const handleDeleteBulk = async () => {
     try {
-      await fetch(`/api/part/${id}`, { method: 'DELETE' });
-      setData(d => d.filter(r => r.id !== id)); setConfirm(null); showToast('Part berhasil dihapus', 'success');
-    } catch { showToast('Gagal menghapus Part', 'error'); }
+      await Promise.all([...selected].map(id => fetch(`/api/part/${id}`, { method: 'DELETE' })));
+      setData(d => d.filter(r => !selected.has(r.id)));
+      showToast(`${selected.size} Part berhasil dihapus`, 'success');
+      setSelected(new Set()); setConfirmBulk(false);
+    } catch { showToast('Gagal menghapus data', 'error'); }
   };
+
+  const toggleSelect = (id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll    = () => setSelected(s => s.size === paginated.length ? new Set() : new Set(paginated.map(r => r.id)));
+  const allChecked   = paginated.length > 0 && paginated.every(r => selected.has(r.id));
 
   const units = ['ALL', ...new Set(data.map(r => r.unit))];
 
   const renderAksi = (r: Part) => {
-    if (canEdit && canDelete) {
-      return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setModal({ editing: r })} color="blue">Edit</BtnGhost><BtnGhost onClick={() => setConfirm(r.id)} color="red">Hapus</BtnGhost></div>;
-    }
+
     if (canEdit) {
       return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setModal({ editing: r })} color="blue">Edit</BtnGhost></div>;
     }
     if (canDelete) {
-      return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setConfirm(r.id)} color="red">Hapus</BtnGhost></div>;
+      return <span style={{ fontSize: 11.5, color: '#9ca3af', fontStyle: 'italic' }}>Gunakan bulk select</span>;
     }
     return <span style={{ fontSize: 11.5, color: '#9ca3af', fontStyle: 'italic' }}>View only</span>;
   };
@@ -242,6 +249,10 @@ export default function MasterPartPage({ showToast, role }: {
   const banner = roleBanner();
 
   const tableRows = paginated.map(r => [
+    canDelete ? (
+      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)}
+        style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} />
+    ) : null,
     <span style={{ fontWeight: 700, color: '#1d4ed8', fontFamily: 'monospace', fontSize: 13 }}>{r.part_no}</span>,
     <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#6b7280' }}>{r.part_no_as400}</span>,
     <span style={{ color: '#1f2937', fontWeight: 500 }}>{r.part_name}</span>,
@@ -294,16 +305,29 @@ export default function MasterPartPage({ showToast, role }: {
       </div>
 
       {/* Table */}
+      {/* Bulk action bar */}
+      {canDelete && selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#dc2626' }}>🗑 {selected.size} Part dipilih</span>
+          <button onClick={() => setConfirmBulk(true)} style={{ padding: '6px 16px', borderRadius: 7, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: font }}>Hapus Semua yang Dipilih</button>
+          <button onClick={() => setSelected(new Set())} style={{ padding: '6px 14px', borderRadius: 7, border: '1.5px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: font }}>Batal Pilih</button>
+        </div>
+      )}
+
       {loading ? <LoadingSpinner /> : (
         <>
-          <Table headers={[{label:'Part No'},{label:'Part No AS400'},{label:'Part Name'},{label:'Unit'},{label:'Supplier Code'},{label:'Supplier Name'},{label:'Status'},{label:'Aksi'}]} rows={tableRows} />
+          <Table headers={[
+              ...(canDelete ? [{label: <input type="checkbox" checked={allChecked} onChange={toggleAll} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} /> as unknown as string}] : []),
+              {label:'Part No'},{label:'Part No AS400'},{label:'Part Name'},{label:'Unit'},{label:'Supplier Code'},{label:'Supplier Name'},{label:'Status'},{label:'Aksi'}
+            ]} rows={tableRows} />
           <Pagination total={filtered.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} />
         </>
       )}
 
       {canEdit && modal === 'add' && <Modal title="Tambah Part Baru" onClose={() => setModal(null)}><PartForm onSave={handleAdd} onClose={() => setModal(null)} existingPartNos={data.map(r => r.part_no)} /></Modal>}
       {canEdit && modal && typeof modal === 'object' && 'editing' in modal && <Modal title={`Edit — ${modal.editing.part_no}`} onClose={() => setModal(null)}><PartForm initial={modal.editing} onSave={handleEdit} onClose={() => setModal(null)} existingPartNos={data.map(r => r.part_no)} /></Modal>}
-      {canDelete && confirm !== null && <ConfirmDialog msg={`Yakin ingin menghapus ${data.find(r => r.id === confirm)?.part_no} — ${data.find(r => r.id === confirm)?.part_name}? Data tidak dapat dikembalikan.`} onConfirm={() => handleDelete(confirm)} onCancel={() => setConfirm(null)} />}
+      {canDelete && confirmBulk && <ConfirmDialog msg={`Yakin ingin menghapus ${selected.size} Part sekaligus? Data tidak dapat dikembalikan.`} onConfirm={handleDeleteBulk} onCancel={() => setConfirmBulk(false)} />}
+
       {canEdit && showUpload && <UploadModal onClose={() => setShowUpload(false)} onSuccess={fetchData} showToast={showToast} />}
     </div>
   );

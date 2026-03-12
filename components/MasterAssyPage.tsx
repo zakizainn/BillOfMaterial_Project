@@ -166,7 +166,8 @@ export default function MasterAssyPage({ showToast, role }: {
   const [data, setData]             = useState<Assy[]>([]);
   const [loading, setLoading]       = useState(true);
   const [modal, setModal]           = useState<null | 'add' | { editing: Assy }>(null);
-  const [confirm, setConfirm]       = useState<number | null>(null);
+  const [selected, setSelected]       = useState<Set<number>>(new Set());
+  const [confirmBulk, setConfirmBulk] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [search, setSearch]         = useState('');
   const [page, setPage]             = useState(1);
@@ -198,29 +199,38 @@ export default function MasterAssyPage({ showToast, role }: {
     } catch { showToast('Gagal memperbarui ASSY', 'error'); }
   };
 
-  const handleDelete = async (id: number) => {
+
+
+  const handleDeleteBulk = async () => {
     try {
-      await fetch(`/api/assy/${id}`, { method: 'DELETE' });
-      setData(d => d.filter(r => r.id !== id)); setConfirm(null); showToast('ASSY berhasil dihapus', 'success');
-    } catch { showToast('Gagal menghapus ASSY', 'error'); }
+      await Promise.all([...selected].map(id => fetch(`/api/assy/${id}`, { method: 'DELETE' })));
+      setData(d => d.filter(r => !selected.has(r.id)));
+      showToast(`${selected.size} ASSY berhasil dihapus`, 'success');
+      setSelected(new Set()); setConfirmBulk(false);
+    } catch { showToast('Gagal menghapus data', 'error'); }
   };
+
+  const toggleSelect  = (id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll     = () => setSelected(s => s.size === paginated.length ? new Set() : new Set(paginated.map(r => r.id)));
+  const allChecked    = paginated.length > 0 && paginated.every(r => selected.has(r.id));
 
   // Bangun kolom aksi berdasarkan role
   const renderAksi = (r: Assy) => {
-    if (canEdit && canDelete) {
-      // tidak ada role yang punya keduanya, tapi jaga-jaga
-      return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setModal({ editing: r })} color="blue">Edit</BtnGhost><BtnGhost onClick={() => setConfirm(r.id)} color="red">Hapus</BtnGhost></div>;
-    }
+
     if (canEdit) {
       return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setModal({ editing: r })} color="blue">Edit</BtnGhost></div>;
     }
     if (canDelete) {
-      return <div style={{ display: 'flex', gap: 6 }}><BtnGhost onClick={() => setConfirm(r.id)} color="red">Hapus</BtnGhost></div>;
+      return <span style={{ fontSize: 11.5, color: '#9ca3af', fontStyle: 'italic' }}>Gunakan bulk select</span>;
     }
     return <span style={{ fontSize: 11.5, color: '#9ca3af', fontStyle: 'italic' }}>View only</span>;
   };
 
   const tableRows = paginated.map(r => [
+    canDelete ? (
+      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)}
+        style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} />
+    ) : null,
     <span style={{ fontWeight: 600, color: '#1d4ed8', fontFamily: 'monospace', fontSize: 13 }}>{r.assy_code}</span>,
     <span style={{ color: '#4b5563' }}>{r.assy_number}</span>,
     <span style={{ fontWeight: 500 }}>{r.prod_qty != null ? Number(r.prod_qty).toLocaleString() : <span style={{ color: '#9ca3af' }}>—</span>}</span>,
@@ -274,16 +284,29 @@ export default function MasterAssyPage({ showToast, role }: {
       </div>
 
       {/* Table */}
+      {/* Bulk action bar */}
+      {canDelete && selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#dc2626' }}>🗑 {selected.size} ASSY dipilih</span>
+          <button onClick={() => setConfirmBulk(true)} style={{ padding: '6px 16px', borderRadius: 7, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: font }}>Hapus Semua yang Dipilih</button>
+          <button onClick={() => setSelected(new Set())} style={{ padding: '6px 14px', borderRadius: 7, border: '1.5px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: font }}>Batal Pilih</button>
+        </div>
+      )}
+
       {loading ? <LoadingSpinner /> : (
         <>
-          <Table headers={[{label:'Assy Code'},{label:'No Urut'},{label:'Prod Qty',right:true},{label:'Deskripsi'},{label:'Status'},{label:'Aksi'}]} rows={tableRows} />
+          <Table headers={[
+              ...(canDelete ? [{label: <input type="checkbox" checked={allChecked} onChange={toggleAll} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} /> as unknown as string}] : []),
+              {label:'Assy Code'},{label:'No Urut'},{label:'Prod Qty',right:true},{label:'Deskripsi'},{label:'Status'},{label:'Aksi'}
+            ]} rows={tableRows} />
           <Pagination total={filtered.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} />
         </>
       )}
 
       {canEdit && modal === 'add' && <Modal title="Tambah ASSY Baru" onClose={() => setModal(null)}><AssyForm onSave={handleAdd} onClose={() => setModal(null)} existingCodes={data.map(r => r.assy_code)} /></Modal>}
       {canEdit && modal && typeof modal === 'object' && 'editing' in modal && <Modal title={`Edit — ${modal.editing.assy_code}`} onClose={() => setModal(null)}><AssyForm initial={modal.editing} onSave={handleEdit} onClose={() => setModal(null)} existingCodes={data.map(r => r.assy_code)} /></Modal>}
-      {canDelete && confirm !== null && <ConfirmDialog msg={`Yakin ingin menghapus ${data.find(r => r.id === confirm)?.assy_code}? Data yang dihapus tidak dapat dikembalikan.`} onConfirm={() => handleDelete(confirm)} onCancel={() => setConfirm(null)} />}
+      {canDelete && confirmBulk && <ConfirmDialog msg={`Yakin ingin menghapus ${selected.size} ASSY sekaligus? Data tidak dapat dikembalikan.`} onConfirm={handleDeleteBulk} onCancel={() => setConfirmBulk(false)} />}
+
       {canEdit && showUpload && <UploadModal onClose={() => setShowUpload(false)} onSuccess={fetchData} showToast={showToast} />}
     </div>
   );
