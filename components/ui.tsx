@@ -326,7 +326,7 @@ export function Pagination({ total, page, perPage, onPage, onPerPage }: {
           fontSize: 13, cursor: 'pointer', outline: 'none', fontFamily: font,
           background: '#fff', color: '#111827',
         }}>
-          {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+          {[10, 25, 50, 100, 250, 500].map(n => <option key={n} value={n}>{n}</option>)}
         </select>
         per halaman
       </div>

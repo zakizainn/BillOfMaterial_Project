@@ -249,10 +249,7 @@ export default function MasterPartPage({ showToast, role }: {
   const banner = roleBanner();
 
   const tableRows = paginated.map(r => [
-    canDelete ? (
-      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)}
-        style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} />
-    ) : null,
+    ...(canDelete ? [<input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} />] : []),
     <span style={{ fontWeight: 700, color: '#1d4ed8', fontFamily: 'monospace', fontSize: 13 }}>{r.part_no}</span>,
     <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#6b7280' }}>{r.part_no_as400}</span>,
     <span style={{ color: '#1f2937', fontWeight: 500 }}>{r.part_name}</span>,

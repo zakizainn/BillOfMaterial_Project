@@ -227,10 +227,7 @@ export default function MasterAssyPage({ showToast, role }: {
   };
 
   const tableRows = paginated.map(r => [
-    canDelete ? (
-      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)}
-        style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} />
-    ) : null,
+    ...(canDelete ? [<input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} />] : []),
     <span style={{ fontWeight: 600, color: '#1d4ed8', fontFamily: 'monospace', fontSize: 13 }}>{r.assy_code}</span>,
     <span style={{ color: '#4b5563' }}>{r.assy_number}</span>,
     <span style={{ fontWeight: 500 }}>{r.prod_qty != null ? Number(r.prod_qty).toLocaleString() : <span style={{ color: '#9ca3af' }}>—</span>}</span>,
