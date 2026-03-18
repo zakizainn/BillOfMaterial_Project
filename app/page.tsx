@@ -1,16 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import MasterAssyPage from '@/components/MasterAssyPage';
 import MasterPartPage from '@/components/MasterPartPage';
 import MasterBomPage  from '@/components/MasterBomPage';
+import ProdPlanPage   from '@/components/ProdPlanPage';
 
 export default function Home() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [page, setPage] = useState<'assy' | 'part' | 'bom'>('assy');
+  const [page, setPage] = useState<'assy' | 'part' | 'bom' | 'prodplan'>('assy');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -51,9 +53,10 @@ export default function Home() {
   };
 
   const tabs = [
-    { key: 'assy', label: 'Master ASSY', icon: '🔩' },
-    { key: 'part', label: 'Master Part',  icon: '⚙️' },
-    { key: 'bom',  label: 'Master BOM',   icon: '📋' },
+    { key: 'assy',     label: 'Master ASSY', icon: '🔩' },
+    { key: 'part',     label: 'Master Part',  icon: '⚙️' },
+    { key: 'bom',      label: 'Master BOM',   icon: '📋' },
+    { key: 'prodplan', label: 'Prod Plan',     icon: '💰' },
   ] as const;
 
   return (
@@ -95,6 +98,20 @@ export default function Home() {
           </button>
         ))}
 
+        <Link href="/report" style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '0 16px', height: 60, fontSize: 13,
+          fontWeight: 500, color: '#6b7280',
+          borderBottom: '2px solid transparent',
+          fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 7,
+          textDecoration: 'none', transition: 'color .15s', whiteSpace: 'nowrap',
+        }}
+        onMouseOver={e => { e.currentTarget.style.color = '#1d4ed8'; }}
+        onMouseOut={e  => { e.currentTarget.style.color = '#6b7280'; }}
+        >
+          <span style={{ fontSize: 14 }}>📊</span>Report
+        </Link>
+
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 8, background: roleBg[role] || '#f8fafc', border: `1px solid ${roleColor[role] || '#e2e8f0'}22` }}>
             <div style={{ width: 26, height: 26, borderRadius: 6, background: roleColor[role] || '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>
@@ -123,6 +140,7 @@ export default function Home() {
         {page === 'assy' && <MasterAssyPage showToast={showToast} role={role} />}
         {page === 'part' && <MasterPartPage showToast={showToast} role={role} />}
         {page === 'bom'  && <MasterBomPage  showToast={showToast} role={role} />}
+        {page === 'prodplan' && <ProdPlanPage showToast={showToast} role={role} />}
       </main>
 
       {toast && (

@@ -289,7 +289,7 @@ export default function MasterBomPage({ showToast, role }: {
   const [showUpload, setShowUpload] = useState(false);
   const [confirm, setConfirm]       = useState<string | null>(null);
   const [detailPeriode, setDetailPeriode] = useState<string | null>(null);
-  const [showGabungan, setShowGabungan]   = useState(false);
+  const [showGabungan, setShowGabungan]     = useState(false);
 
   const fetchData = () => {
     setLoading(true);

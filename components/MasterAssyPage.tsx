@@ -9,7 +9,7 @@ const font = "'DM Sans', system-ui, sans-serif";
 
 function downloadTemplate() {
   const wb = XLSX.utils.book_new();
-  const data = [['assy_code','assy_number','prod_qty','description','is_active'],['ASSY 20',20,500,'Contoh deskripsi','true']];
+  const data = [['assy_code','assy_number','description','is_active'],['ASSY 20',20,'Contoh deskripsi','true']];
   const ws = XLSX.utils.aoa_to_sheet(data);
   ws['!cols'] = [20,14,12,30,12].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, 'Master ASSY');
@@ -36,13 +36,13 @@ function UploadModal({ onClose, onSuccess, showToast }: {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, unknown>[];
       if (!rows.length) { setErrors(['File kosong.']); return; }
-      const missing = ['assy_code','assy_number','prod_qty','description','is_active'].filter(c => !Object.keys(rows[0]).includes(c));
+      const missing = ['assy_code','assy_number','description','is_active'].filter(c => !Object.keys(rows[0]).includes(c));
       if (missing.length) { setErrors([`Kolom kurang: ${missing.join(', ')}`]); return; }
       const rowErrors: string[] = [];
       const cleaned = rows.map((row, i) => {
         if (!row.assy_code) rowErrors.push(`Baris ${i+2}: assy_code kosong`);
         if (!row.assy_number || isNaN(Number(row.assy_number))) rowErrors.push(`Baris ${i+2}: assy_number harus angka`);
-        return { assy_code: String(row.assy_code).trim(), assy_number: Number(row.assy_number), prod_qty: row.prod_qty !== '' ? Number(row.prod_qty) : null, description: String(row.description || ''), is_active: String(row.is_active).toLowerCase() !== 'false' };
+        return { assy_code: String(row.assy_code).trim(), assy_number: Number(row.assy_number), prod_qty: null, description: String(row.description || ''), is_active: String(row.is_active).toLowerCase() !== 'false' };
       });
       if (rowErrors.length) { setErrors(rowErrors); return; }
       setPreview(cleaned);
@@ -97,7 +97,7 @@ function UploadModal({ onClose, onSuccess, showToast }: {
         <div style={{ marginBottom: 20 }}>
           <p style={{ fontWeight: 600, fontSize: 13.5, color: '#111827', marginBottom: 10, fontFamily: font }}>👁 Preview Data ({preview.length} baris)</p>
           <div style={{ maxHeight: 260, overflowY: 'auto', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-            <Table headers={[{label:'Assy Code'},{label:'No Urut'},{label:'Prod Qty'},{label:'Deskripsi'},{label:'Status'}]} rows={preview.map(r => [r.assy_code, r.assy_number, r.prod_qty ?? '—', r.description || '—', <Badge active={!!r.is_active} />])} />
+            <Table headers={[{label:'Assy Code'},{label:'No Urut'},{label:'Deskripsi'},{label:'Status'}]} rows={preview.map(r => [r.assy_code, r.assy_number, r.description || '—', <Badge active={!!r.is_active} />])} />
           </div>
         </div>
       )}
@@ -117,7 +117,6 @@ function AssyForm({ initial, onSave, onClose, existingCodes }: {
   const [form, setForm] = useState({
     assy_code:   initial?.assy_code   ?? '',
     assy_number: initial?.assy_number?.toString() ?? '',
-    prod_qty:    initial?.prod_qty?.toString()    ?? '',
     description: initial?.description ?? '',
     is_active:   initial?.is_active   ?? true,
   });
@@ -129,14 +128,14 @@ function AssyForm({ initial, onSave, onClose, existingCodes }: {
     if (!form.assy_code.trim()) e.assy_code = 'Assy code wajib diisi';
     else if (!editing && existingCodes.includes(form.assy_code.trim())) e.assy_code = 'Assy code sudah ada';
     if (!form.assy_number || isNaN(Number(form.assy_number))) e.assy_number = 'Nomor urut wajib diisi (angka)';
-    if (form.prod_qty !== '' && isNaN(Number(form.prod_qty))) e.prod_qty = 'Harus berupa angka';
+
     return e;
   };
 
   const handleSave = () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    onSave({ ...initial, assy_code: form.assy_code.trim(), assy_number: Number(form.assy_number), prod_qty: form.prod_qty === '' ? null : Number(form.prod_qty), description: form.description, is_active: form.is_active });
+    onSave({ ...initial, assy_code: form.assy_code.trim(), assy_number: Number(form.assy_number), prod_qty: null, description: form.description, is_active: form.is_active });
   };
 
   return (
@@ -145,7 +144,6 @@ function AssyForm({ initial, onSave, onClose, existingCodes }: {
         <Field label="Assy Code" required error={errors.assy_code}><Input value={form.assy_code} onChange={e => set('assy_code', e.target.value)} placeholder="e.g. ASSY 1" disabled={editing} /></Field>
         <Field label="Nomor Urut" required error={errors.assy_number}><Input type="number" value={form.assy_number} onChange={e => set('assy_number', e.target.value)} placeholder="1" /></Field>
       </div>
-      <Field label="Production Qty" error={errors.prod_qty}><Input type="number" value={form.prod_qty} onChange={e => set('prod_qty', e.target.value)} placeholder="e.g. 399" /></Field>
       <Field label="Description"><Input value={form.description ?? ''} onChange={e => set('description', e.target.value)} placeholder="Deskripsi (opsional)" /></Field>
       <Field label="Status"><Select value={form.is_active ? 'active' : 'inactive'} onChange={e => set('is_active', e.target.value === 'active')} options={['active','inactive']} /></Field>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
@@ -230,7 +228,6 @@ export default function MasterAssyPage({ showToast, role }: {
     ...(canDelete ? [<input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} />] : []),
     <span style={{ fontWeight: 600, color: '#1d4ed8', fontFamily: 'monospace', fontSize: 13 }}>{r.assy_code}</span>,
     <span style={{ color: '#4b5563' }}>{r.assy_number}</span>,
-    <span style={{ fontWeight: 500 }}>{r.prod_qty != null ? Number(r.prod_qty).toLocaleString() : <span style={{ color: '#9ca3af' }}>—</span>}</span>,
     r.description ? <span style={{ color: '#4b5563' }}>{r.description}</span> : <span style={{ color: '#d1d5db' }}>—</span>,
     <Badge active={r.is_active} />,
     renderAksi(r),
@@ -277,7 +274,6 @@ export default function MasterAssyPage({ showToast, role }: {
       <div style={{ display: 'flex', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
         <StatCard label="Total ASSY"     value={data.length}                                                        color="#1d4ed8" />
         <StatCard label="Active"         value={data.filter(r => r.is_active).length}                              color="#16a34a" />
-        <StatCard label="Total Prod Qty" value={data.reduce((s,r) => s+(Number(r.prod_qty)||0),0).toLocaleString()} color="#7c3aed" />
       </div>
 
       {/* Table */}
@@ -294,7 +290,7 @@ export default function MasterAssyPage({ showToast, role }: {
         <>
           <Table headers={[
               ...(canDelete ? [{label: <input type="checkbox" checked={allChecked} onChange={toggleAll} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#dc2626' }} /> as unknown as string}] : []),
-              {label:'Assy Code'},{label:'No Urut'},{label:'Prod Qty',right:true},{label:'Deskripsi'},{label:'Status'},{label:'Aksi'}
+              {label:'Assy Code'},{label:'No Urut'},{label:'Deskripsi'},{label:'Status'},{label:'Aksi'}
             ]} rows={tableRows} />
           <Pagination total={filtered.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} />
         </>
