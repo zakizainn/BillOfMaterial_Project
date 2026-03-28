@@ -26,7 +26,7 @@ export default function Home() {
 
   if (status === 'loading' || !session) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f2f5', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         <div style={{ textAlign: 'center', color: '#6b7280' }}>
           <div style={{ width: 36, height: 36, border: '3px solid #e5e7eb', borderTop: '3px solid #3b82f6', borderRadius: '50%', animation: 'spin .75s linear infinite', margin: '0 auto 14px' }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
@@ -60,7 +60,7 @@ export default function Home() {
   ] as const;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f5', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -71,16 +71,17 @@ export default function Home() {
 
       {/* Navbar */}
       <nav style={{
-        background: '#fff', borderBottom: '1px solid #e8eaed',
+        background: '#fff',
+        borderBottom: '1px solid #e8eaed',
         padding: '0 40px', display: 'flex', alignItems: 'center',
-        position: 'sticky', top: 0, zIndex: 100, height: 60,
-        boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        position: 'sticky', top: 0, zIndex: 100, height: 58,
+        boxShadow: '0 1px 0 #e8eaed, 0 2px 8px rgba(0,0,0,.04)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 32, paddingRight: 32, borderRight: '1px solid #e8eaed' }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, boxShadow: '0 2px 8px rgba(59,130,246,.3)' }}>📋</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 28, paddingRight: 28, borderRight: '1px solid #f1f5f9' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, boxShadow: '0 2px 10px rgba(37,99,235,.28)', flexShrink: 0 }}>📋</div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: '#111827', lineHeight: 1.2 }}>BOM Database</div>
-            <div style={{ fontSize: 10.5, color: '#9ca3af', fontWeight: 500 }}>Master Data Input</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>BOM Database</div>
+            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500, letterSpacing: 0.2 }}>Master Data System</div>
           </div>
         </div>
 
@@ -128,15 +129,15 @@ export default function Home() {
             cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6,
             transition: 'all .15s',
           }}
-          onMouseOver={e => { e.currentTarget.style.borderColor = '#fca5a5'; e.currentTarget.style.color = '#dc2626'; }}
-          onMouseOut={e =>  { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#6b7280'; }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = '#fca5a5'; e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.background = '#fef2f2'; }}
+          onMouseOut={e =>  { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#6b7280'; e.currentTarget.style.background = 'none'; }}
           >
             🚪 Logout
           </button>
         </div>
       </nav>
 
-      <main style={{ padding: '32px 40px', maxWidth: 1400, margin: '0 auto' }}>
+      <main style={{ padding: '28px 40px', maxWidth: 1440, margin: '0 auto' }}>
         {page === 'assy' && <MasterAssyPage showToast={showToast} role={role} />}
         {page === 'part' && <MasterPartPage showToast={showToast} role={role} />}
         {page === 'bom'  && <MasterBomPage  showToast={showToast} role={role} />}

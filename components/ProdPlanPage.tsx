@@ -157,12 +157,12 @@ export default function ProdPlanPage({ showToast, role }: {
         borderRadius: 10, padding: '10px 16px', marginBottom: 20,
         fontSize: 13, color: canEdit ? '#dc2626' : '#92400e',
         display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        {canEdit
+      }}
+        dangerouslySetInnerHTML={{ __html: canEdit
           ? '💰 Role <b>FINANCE</b> — dapat mengisi Prod Qty per ASSY per periode.'
-          : `👁 Role <b>${role}</b> — hanya dapat melihat data Prod Plan.`}
-        <span dangerouslySetInnerHTML={{ __html: '' }} />
-      </div>
+          : `👁 Role <b>${role}</b> — hanya dapat melihat data Prod Plan.`
+        }}
+      />
 
       {!selectedPeriode ? (
         /* ── Daftar Periode ── */

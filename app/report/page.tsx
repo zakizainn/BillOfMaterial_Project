@@ -157,41 +157,61 @@ function ReportContent() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f5', fontFamily: font }}>
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: font }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
       `}</style>
 
       {/* Navbar */}
-      <nav style={{ background: '#fff', borderBottom: '1px solid #e8eaed', padding: '0 40px', display: 'flex', alignItems: 'center', height: 60, boxShadow: '0 1px 3px rgba(0,0,0,.06)', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 24, paddingRight: 24, borderRight: '1px solid #e8eaed' }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>📊</div>
+      <nav style={{ background: '#fff', borderBottom: '1px solid #e8eaed', padding: '0 40px', display: 'flex', alignItems: 'center', height: 58, boxShadow: '0 1px 0 #e8eaed, 0 2px 8px rgba(0,0,0,.04)', position: 'sticky', top: 0, zIndex: 100 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg,#1e3a8a,#2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, boxShadow: '0 2px 10px rgba(37,99,235,.28)', flexShrink: 0 }}>📊</div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: '#111827' }}>Report</div>
-            <div style={{ fontSize: 10.5, color: '#9ca3af', fontWeight: 500 }}>BOM × Prod Qty</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a', letterSpacing: -0.3 }}>BOM Database</div>
+            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>Master Data System</div>
           </div>
         </div>
-        <button onClick={() => router.back?.()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', fontWeight: 600, fontFamily: font, display: 'flex', alignItems: 'center', gap: 6 }}>
-          ← Kembali
-        </button>
+        <div style={{ width: 1, height: 28, background: '#e8eaed', margin: '0 20px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#64748b' }}>
+          <button onClick={() => router.back?.()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#64748b', fontWeight: 500, fontFamily: font, display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 6, transition: 'background .15s, color .15s' }}
+            onMouseOver={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#0f172a'; }}
+            onMouseOut={e  => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#64748b'; }}
+          >
+            <span style={{ fontSize: 14 }}>←</span> Home
+          </button>
+          <span style={{ color: '#cbd5e1' }}>/</span>
+          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: 13 }}>Report</span>
+        </div>
       </nav>
 
-      <main style={{ padding: '28px 40px', maxWidth: 1600, margin: '0 auto' }}>
+      <main style={{ padding: '32px 40px', maxWidth: 1600, margin: '0 auto', animation: 'fadeUp .3s ease' }}>
+        {/* Page title */}
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: -0.5 }}>Report</h1>
+          <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 4 }}>Kalkulasi kebutuhan part berdasarkan BOM × Prod Qty</p>
+        </div>
+
         {/* Filter card */}
-        <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e8eaed', padding: '20px 24px', marginBottom: 24, boxShadow: '0 1px 4px rgba(0,0,0,.05)' }}>
-          <p style={{ fontSize: 11.5, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 14 }}>Filter Report</p>
+        <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e8eaed', padding: '24px 28px', marginBottom: 24, boxShadow: '0 1px 4px rgba(0,0,0,.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>⚙️</div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', letterSpacing: -0.1 }}>Konfigurasi Report</p>
+          </div>
 
           {/* Mode toggle */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: '#f8fafc', borderRadius: 10, padding: 4, width: 'fit-content', border: '1px solid #e2e8f0' }}>
             {(['single','gabungan'] as const).map(m => (
               <button key={m} onClick={() => { setMode(m); setHasLoaded(false); }} style={{
-                padding: '7px 18px', borderRadius: 8, border: '1.5px solid',
-                borderColor: mode === m ? '#1d4ed8' : '#e2e8f0',
-                background: mode === m ? '#eff6ff' : '#fff',
-                color: mode === m ? '#1d4ed8' : '#6b7280',
-                fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: font,
+                padding: '7px 20px', borderRadius: 8, border: 'none',
+                background: mode === m ? '#fff' : 'transparent',
+                color: mode === m ? '#1d4ed8' : '#64748b',
+                fontWeight: mode === m ? 700 : 500,
+                fontSize: 13, cursor: 'pointer', fontFamily: font,
+                boxShadow: mode === m ? '0 1px 4px rgba(0,0,0,.08)' : 'none',
+                transition: 'all .15s',
               }}>
                 {m === 'single' ? '📅 Single Periode' : '📆 Gabungan'}
               </button>
@@ -252,7 +272,7 @@ function ReportContent() {
               </>
             )}
 
-            <button onClick={handleLoad} style={{ padding: '8px 24px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, boxShadow: '0 2px 8px rgba(59,130,246,.3)' }}>
+            <button onClick={handleLoad} style={{ padding: '8px 24px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#1e3a8a,#2563eb)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 3px 10px rgba(37,99,235,.3)', letterSpacing: 0.1 }}>
               🔍 Tampilkan
             </button>
           </div>
@@ -275,10 +295,10 @@ function ReportContent() {
 
         {/* Content */}
         {!hasLoaded ? (
-          <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e8eaed', padding: '60px 0', textAlign: 'center', color: '#9ca3af' }}>
-            <div style={{ fontSize: 40, marginBottom: 14 }}>📊</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>Pilih periode lalu klik Tampilkan</div>
-            <div style={{ fontSize: 13 }}>Kalkulasi: ROUNDUP(SUMPRODUCT(prod_qty × qty_per_unit), 0)</div>
+          <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e8eaed', padding: '80px 0', textAlign: 'center', color: '#9ca3af' }}>
+            <div style={{ fontSize: 52, marginBottom: 16, filter: 'grayscale(.2)' }}>📊</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#475569', marginBottom: 8, letterSpacing: -0.2 }}>Pilih periode lalu klik Tampilkan</div>
+            <div style={{ fontSize: 13, color: '#94a3b8', fontFamily: 'monospace', background: '#f8fafc', display: 'inline-block', padding: '4px 14px', borderRadius: 6, border: '1px solid #e2e8f0' }}>ROUNDUP(SUMPRODUCT(prod_qty × qty_per_unit), 0)</div>
           </div>
         ) : loading ? (
           <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e8eaed' }}><LoadingBox /></div>
