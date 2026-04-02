@@ -52,7 +52,6 @@ function UploadModal({ onClose, onSuccess, showToast }: {
           carline:     String(row.carline   || '').trim() || null,
           destinasi:   String(row.destinasi || '').trim() || null,
           komoditi:    String(row.komoditi  || '').trim() || null,
-          prod_qty:    null,
           description: String(row.description || '').trim(),
           is_active:   String(row.is_active).toLowerCase() !== 'false',
         };
@@ -160,7 +159,6 @@ function AssyForm({ initial, onSave, onClose, existingCodes }: {
       carline:     form.carline.trim()   || null,
       destinasi:   form.destinasi.trim() || null,
       komoditi:    form.komoditi.trim()  || null,
-      prod_qty:    null,
       description: form.description,
       is_active:   form.is_active,
     });

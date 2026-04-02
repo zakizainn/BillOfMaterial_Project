@@ -7,7 +7,6 @@ export interface Assy {
   carline: string | null;
   destinasi: string | null;
   komoditi: string | null;
-  prod_qty: number | null;
   description: string | null;
   is_active: boolean;
   created_at: string;
