@@ -12,10 +12,10 @@ function formatPeriode(p: string) {
 
 interface ListRow {
   part_no: string; assy_code: string; qty_per_unit: number;
-  part_name: string; unit: string; supplier_name: string;
+  part_name: string; unit: string; supplier_name: string; price: number | null;
 }
 interface PivotPart {
-  part_no: string; part_name: string; unit: string; supplier_name: string;
+  part_no: string; part_name: string; unit: string; supplier_name: string; price: number | null;
 }
 
 export default function BomDetailModal({ periode, onClose }: { periode: string; onClose: () => void }) {
@@ -116,6 +116,7 @@ export default function BomDetailModal({ periode, onClose }: { periode: string; 
                       {['Part No','Part Name','Unit','Supplier','Assy Code','Qty/Unit'].map(h => (
                         <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 11.5, color: '#6b7280', borderBottom: '1px solid #e8eaed', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
+                      <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, fontSize: 11.5, color: '#15803d', borderBottom: '1px solid #e8eaed', whiteSpace: 'nowrap' }}>Price (USD)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -129,6 +130,9 @@ export default function BomDetailModal({ periode, onClose }: { periode: string; 
                         <td style={{ padding: '9px 12px', color: '#6b7280', fontSize: 12 }}>{r.supplier_name || '—'}</td>
                         <td style={{ padding: '9px 12px', fontFamily: 'monospace', fontSize: 12, color: '#7c3aed' }}>{r.assy_code}</td>
                         <td style={{ padding: '9px 12px', fontWeight: 600, color: '#111827', textAlign: 'right' }}>{Number(r.qty_per_unit).toLocaleString()}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', color: r.price != null ? '#15803d' : '#d1d5db', fontWeight: r.price != null ? 700 : 400 }}>
+                          {r.price != null ? `$ ${Number(r.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -156,6 +160,7 @@ export default function BomDetailModal({ periode, onClose }: { periode: string; 
                             {a.length > 14 ? a.slice(0, 13) + '…' : a}
                           </th>
                         ))}
+                        <th style={{ padding: '8px 10px', color: '#fbbf24', fontWeight: 700, fontSize: 10, textAlign: 'right', borderLeft: '2px solid #f59e0b', minWidth: 100, background: '#1c2d1e', position: 'sticky', right: 0, zIndex: 11 }}>PRICE (USD)</th>
                       </tr>
                     </thead>
                     <tbody>

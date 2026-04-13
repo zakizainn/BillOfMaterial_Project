@@ -121,9 +121,9 @@ function UploadModal({ onClose, onSuccess, showToast }: {
   );
 }
 
-function AssyForm({ initial, onSave, onClose, existingCodes }: {
+function AssyForm({ initial, onSave, onClose, existingEntries }: {
   initial?: Assy; onSave: (f: Partial<Assy>) => void;
-  onClose: () => void; existingCodes: string[];
+  onClose: () => void; existingEntries: { assy_code: string; sequence: number | null }[];
 }) {
   const editing = !!initial;
   const [form, setForm] = useState({
@@ -142,9 +142,15 @@ function AssyForm({ initial, onSave, onClose, existingCodes }: {
   const validate = () => {
     const e: Record<string,string> = {};
     if (!form.assy_code.trim()) e.assy_code = 'Assy code wajib diisi';
-    else if (!editing && existingCodes.includes(form.assy_code.trim())) e.assy_code = 'Assy code sudah ada';
+    else if (!editing) {
+      // Cek duplikat berdasarkan assy_code + sequence
+      const isDuplicate = existingEntries.some(
+        entry => entry.assy_code === form.assy_code.trim() &&
+        String(entry.sequence ?? '') === String(form.sequence ?? '')
+      );
+      if (isDuplicate) e.assy_code = 'Kombinasi Assy Code dan Sequence sudah ada';
+    }
     if (!form.assy_number || isNaN(Number(form.assy_number))) e.assy_number = 'Nomor urut wajib diisi (angka)';
-
     return e;
   };
 
@@ -381,8 +387,8 @@ export default function MasterAssyPage({ showToast, role }: {
         </>
       )}
 
-      {canEdit && modal === 'add' && <Modal title="Tambah ASSY Baru" onClose={() => setModal(null)}><AssyForm onSave={handleAdd} onClose={() => setModal(null)} existingCodes={data.map(r => r.assy_code)} /></Modal>}
-      {canEdit && modal && typeof modal === 'object' && 'editing' in modal && <Modal title={`Edit — ${modal.editing.assy_code}`} onClose={() => setModal(null)}><AssyForm initial={modal.editing} onSave={handleEdit} onClose={() => setModal(null)} existingCodes={data.map(r => r.assy_code)} /></Modal>}
+      {canEdit && modal === 'add' && <Modal title="Tambah ASSY Baru" onClose={() => setModal(null)}><AssyForm onSave={handleAdd} onClose={() => setModal(null)} existingEntries={data.map(r => ({ assy_code: r.assy_code, sequence: r.sequence ?? null }))} /></Modal>}
+      {canEdit && modal && typeof modal === 'object' && 'editing' in modal && <Modal title={`Edit — ${modal.editing.assy_code}`} onClose={() => setModal(null)}><AssyForm initial={modal.editing} onSave={handleEdit} onClose={() => setModal(null)} existingEntries={data.map(r => ({ assy_code: r.assy_code, sequence: r.sequence ?? null }))} /></Modal>}
       {canToggleStatus && confirmToggle && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,.5)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: '28px 28px 22px', maxWidth: 440, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,.18)', fontFamily: font }}>

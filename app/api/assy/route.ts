@@ -24,14 +24,14 @@ export async function POST(request: Request) {
     const result = await pool.query(
       `INSERT INTO master_assy (assy_code, assy_number, sequence, carline, destinasi, komoditi, description, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (assy_code) DO NOTHING
+       ON CONFLICT (assy_code, sequence) DO NOTHING
        RETURNING *`,
       [assy_code, assy_number, sequence ?? null, carline ?? null, destinasi ?? null,
        komoditi ?? null, description ?? null, is_active ?? true]
     );
 
     if (!result.rows[0]) {
-      return NextResponse.json({ error: 'Assy code sudah ada' }, { status: 409 });
+      return NextResponse.json({ error: 'Kombinasi Assy Code dan Sequence sudah ada' }, { status: 409 });
     }
 
     return NextResponse.json(result.rows[0], { status: 201 });

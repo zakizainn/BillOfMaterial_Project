@@ -40,9 +40,11 @@ export async function GET(
           b.qty_per_unit,
           mp.part_name,
           mp.unit,
-          mp.supplier_name
+          mp.supplier_name,
+          pp.price
         FROM bom_detail b
         LEFT JOIN master_part mp ON mp.part_no = b.part_no
+        LEFT JOIN part_price  pp ON pp.part_no = b.part_no AND pp.periode = b.periode
         ${where}
         ORDER BY b.part_no, b.assy_code
         LIMIT $2 OFFSET $3
