@@ -415,3 +415,205 @@ export function Pagination({ total, page, perPage, onPage, onPerPage }: {
     </div>
   );
 }
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────
+export function Sidebar({ isOpen, onClose, children }: {
+  isOpen: boolean; onClose: () => void; children: ReactNode;
+}) {
+  return (
+    <>
+      {isOpen && (
+        <div onClick={onClose} style={{
+          position: 'fixed', inset: 0, zIndex: 30, background: 'rgba(0,0,0,.5)',
+          backdropFilter: 'blur(4px)',
+        }}
+        />
+      )}
+      <aside style={{
+        position: 'fixed', left: 0, top: 0, width: 260, height: '100vh', zIndex: 40,
+        background: '#fff', borderRight: `1px solid ${tokens.border}`,
+        overflowY: 'auto', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 4px 12px rgba(0,0,0,.04)',
+        transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform .3s ease-out',
+      }}>
+        {children}
+      </aside>
+    </>
+  );
+}
+
+// ─── Sidebar Header ───────────────────────────────────────────────────────
+export function SidebarHeader({ children }: { children: ReactNode }) {
+  return (
+    <div style={{
+      padding: '20px 16px', borderBottom: `1px solid ${tokens.border}`,
+      display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+    }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: 10,
+        background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 18, boxShadow: '0 2px 10px rgba(37,99,235,.25)',
+        flexShrink: 0,
+      }}>📋</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontWeight: 800, fontSize: 14, color: tokens.gray900,
+          lineHeight: 1.2, letterSpacing: -0.3,
+        }}>BOM Database</div>
+        <div style={{
+          fontSize: 10, color: tokens.gray400, fontWeight: 500,
+          letterSpacing: 0.2, marginTop: 2,
+        }}>Master Data</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sidebar Nav ──────────────────────────────────────────────────────────
+export function SidebarNav({ children }: { children: ReactNode }) {
+  return (
+    <nav style={{
+      flex: 1, padding: '16px 8px', display: 'flex', flexDirection: 'column', gap: 4,
+      overflow: 'y', overflowX: 'hidden',
+    }}>
+      {children}
+    </nav>
+  );
+}
+
+// ─── Sidebar Item ─────────────────────────────────────────────────────────
+export function SidebarItem({ 
+  label, icon, active, onClick, external 
+}: {
+  label: string; icon: string; active?: boolean;
+  onClick: () => void; external?: boolean;
+}) {
+  return (
+    <button onClick={onClick} style={{
+      width: '100%', display: 'flex', alignItems: 'center', gap: 11,
+      padding: '10px 12px', borderRadius: 8, background: active ? tokens.primaryLight : 'transparent',
+      border: active ? `1.5px solid ${tokens.primary}` : '1.5px solid transparent',
+      color: active ? tokens.primary : tokens.gray600,
+      fontSize: 13.5, fontWeight: active ? 600 : 500, cursor: 'pointer',
+      fontFamily: font, transition: 'all .2s', textAlign: 'left', whiteSpace: 'nowrap',
+      position: 'relative',
+    }}
+    onMouseOver={e => {
+      if (!active) {
+        e.currentTarget.style.background = tokens.gray50;
+        e.currentTarget.style.color = tokens.gray900;
+      }
+    }}
+    onMouseOut={e => {
+      if (!active) {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = tokens.gray600;
+      }
+    }}
+    >
+      <span style={{ fontSize: 16, flexShrink: 0 }}>{icon}</span>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      {active && (
+        <div style={{
+          width: 2, height: 20, background: tokens.primary, borderRadius: 1,
+          position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
+        }} />
+      )}
+    </button>
+  );
+}
+
+// ─── Sidebar User Card ─────────────────────────────────────────────────────
+export function SidebarUserCard({ 
+  userName, role, onLogout 
+}: {
+  userName: string; role: string; onLogout: () => void;
+}) {
+  const roleColor: Record<string, string> = {
+    MPC:     '#2563eb',
+    PPC:     '#16a34a',
+    DESIGN:  '#9333ea',
+    FINANCE: '#d97706',
+  };
+  const roleBg: Record<string, string> = {
+    MPC:     '#eff6ff',
+    PPC:     '#f0fdf4',
+    DESIGN:  '#faf5ff',
+    FINANCE: '#fffbeb',
+  };
+
+  return (
+    <div style={{
+      padding: '16px 8px', borderTop: `1px solid ${tokens.border}`,
+      display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+        borderRadius: 8, background: roleBg[role] || tokens.gray50,
+        border: `1px solid ${roleColor[role] || tokens.gray200}22`,
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 7, background: roleColor[role] || tokens.gray600,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0,
+        }}>
+          {userName.charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 12, fontWeight: 600, color: tokens.gray900,
+            lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>{userName}</div>
+          <div style={{
+            fontSize: 10, fontWeight: 600, color: roleColor[role] || tokens.gray600,
+            marginTop: 2,
+          }}>{role}</div>
+        </div>
+      </div>
+      <button onClick={onLogout} style={{
+        background: 'none', border: `1.5px solid ${tokens.border}`,
+        borderRadius: 8, padding: '8px 12px', fontSize: 12.5, fontWeight: 600,
+        color: tokens.gray600, cursor: 'pointer', fontFamily: font,
+        display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center',
+        transition: 'all .15s',
+      }}
+      onMouseOver={e => {
+        e.currentTarget.style.borderColor = tokens.dangerBorder;
+        e.currentTarget.style.color = tokens.danger;
+        e.currentTarget.style.background = tokens.dangerLight;
+      }}
+      onMouseOut={e => {
+        e.currentTarget.style.borderColor = tokens.border;
+        e.currentTarget.style.color = tokens.gray600;
+        e.currentTarget.style.background = 'none';
+      }}
+      >
+        🚪 Logout
+      </button>
+    </div>
+  );
+}
+
+// ─── Mobile Menu Button ────────────────────────────────────────────────────
+export function MobileMenuButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      background: 'none', border: 'none', cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      width: 40, height: 40, borderRadius: 8, color: tokens.gray600,
+      fontSize: 20, transition: 'all .2s',
+    }}
+    onMouseOver={e => {
+      e.currentTarget.style.background = tokens.gray100;
+    }}
+    onMouseOut={e => {
+      e.currentTarget.style.background = 'none';
+    }}
+    >
+      ☰
+    </button>
+  );
+}

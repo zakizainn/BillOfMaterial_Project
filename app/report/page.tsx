@@ -106,6 +106,20 @@ function ReportContent() {
     return `${base}&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}`;
   }, [mode, periode, dari, sampai, selectedAssy]);
 
+  const buildDownloadUrl = (targetPeriode: string, s: string) => {
+    const base = `/api/report?periode=${encodeURIComponent(targetPeriode)}${selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : ''}`;
+    return `${base}&search=${encodeURIComponent(s)}&download=true`;
+  };
+
+  const handleExport = () => {
+    const targetPeriode = mode === 'single' ? periode : activePer;
+    if (!targetPeriode) return;
+    const url = buildDownloadUrl(targetPeriode, search);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.click();
+  };
+
   const fetchData = useCallback(async (p: number, s: string) => {
     setLoading(true);
     try {
@@ -316,6 +330,9 @@ function ReportContent() {
                   onBlur={e =>  e.target.style.borderColor = '#e2e8f0'}
                 />
               </div>
+              <button onClick={handleExport} disabled={(mode === 'single' ? !periode : !activePer) || loading} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: (mode === 'single' ? !!periode : !!activePer) ? '#10b981' : '#d1d5db', color: '#fff', fontSize: 13, fontWeight: 700, cursor: (mode === 'single' ? !!periode : !!activePer) ? 'pointer' : 'not-allowed', fontFamily: font, whiteSpace: 'nowrap' }}>
+                ⬇️ Ekspor
+              </button>
               <span style={{ fontSize: 12.5, color: '#6b7280' }}>
                 <b style={{ color: '#111827' }}>{totalParts.toLocaleString()}</b> part ·
                 <b style={{ color: '#111827' }}> {assyCodes.length}</b> ASSY ·
@@ -442,4 +459,3 @@ function ReportContent() {
     </div>
   );
 }
-
