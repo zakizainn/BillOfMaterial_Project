@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as XLSX from 'xlsx';
 import pool from '@/lib/db';
 
 // GET /api/report?periode=2026-06&page=1&limit=50&search=
@@ -10,6 +11,7 @@ export async function GET(request: Request) {
     const dari       = url.searchParams.get('dari');
     const sampai     = url.searchParams.get('sampai');
     const assyFilter = url.searchParams.get('assy_codes');
+    const download   = url.searchParams.get('download') === 'true';
     const page       = parseInt(url.searchParams.get('page')  || '1');
     const limit      = parseInt(url.searchParams.get('limit') || '50');
     const search     = url.searchParams.get('search') || '';
@@ -53,35 +55,51 @@ export async function GET(request: Request) {
         prodMap[r.assy_code] = Number(r.prod_qty);
       });
 
-      // Count total parts (untuk pagination)
       const searchWhere = search ? `AND (b.part_no ILIKE $${assyFilter ? 3 : 2} OR mp.part_name ILIKE $${assyFilter ? 3 : 2})` : '';
-      const countParams = [per, ...(assyFilter ? [assyParams] : []), ...(search ? [`%${search}%`] : [])];
-      const countResult = await pool.query(`
-        SELECT COUNT(DISTINCT b.part_no) FROM bom_detail b
-        LEFT JOIN master_part mp ON mp.part_no = b.part_no
-        WHERE b.periode = $1
-        ${assyFilter ? `AND b.assy_code = ANY($2::text[])` : ''}
-        ${searchWhere}
-      `, countParams);
-      const totalParts = Number(countResult.rows[0].count);
+      const searchParams = search ? [`%${search}%`] : [];
+      const baseParams = [per, ...(assyFilter ? [assyParams] : [])];
 
-      // Ambil parts dengan pagination
-      const dataParams = [per, ...(assyFilter ? [assyParams] : []), ...(search ? [`%${search}%`] : []), limit, offset];
-      const lastIdx = dataParams.length;
-      const partsResult = await pool.query(`
-        SELECT DISTINCT b.part_no, mp.part_no_as400, mp.part_name, mp.unit, mp.supplier_name
-        FROM bom_detail b
-        LEFT JOIN master_part mp ON mp.part_no = b.part_no
-        WHERE b.periode = $1
-        ${assyFilter ? `AND b.assy_code = ANY($2::text[])` : ''}
-        ${searchWhere}
-        ORDER BY b.part_no
-        LIMIT $${lastIdx - 1} OFFSET $${lastIdx}
-      `, dataParams);
+      let partsResult;
+      let totalParts = 0;
+
+      if (download) {
+        const dataParams = [...baseParams, ...searchParams];
+        partsResult = await pool.query(`
+          SELECT DISTINCT b.part_no, mp.part_no_as400, mp.part_name, mp.unit, mp.supplier_name
+          FROM bom_detail b
+          LEFT JOIN master_part mp ON mp.part_no = b.part_no
+          WHERE b.periode = $1
+          ${assyFilter ? `AND b.assy_code = ANY($2::text[])` : ''}
+          ${searchWhere}
+          ORDER BY b.part_no
+        `, dataParams);
+        totalParts = partsResult.rows.length;
+      } else {
+        const countParams = [...baseParams, ...searchParams];
+        const countResult = await pool.query(`
+          SELECT COUNT(DISTINCT b.part_no) FROM bom_detail b
+          LEFT JOIN master_part mp ON mp.part_no = b.part_no
+          WHERE b.periode = $1
+          ${assyFilter ? `AND b.assy_code = ANY($2::text[])` : ''}
+          ${searchWhere}
+        `, countParams);
+        totalParts = Number(countResult.rows[0].count);
+
+        const dataParams = [...baseParams, ...searchParams, limit, offset];
+        const lastIdx = dataParams.length;
+        partsResult = await pool.query(`
+          SELECT DISTINCT b.part_no, mp.part_no_as400, mp.part_name, mp.unit, mp.supplier_name
+          FROM bom_detail b
+          LEFT JOIN master_part mp ON mp.part_no = b.part_no
+          WHERE b.periode = $1
+          ${assyFilter ? `AND b.assy_code = ANY($2::text[])` : ''}
+          ${searchWhere}
+          ORDER BY b.part_no
+          LIMIT $${lastIdx - 1} OFFSET $${lastIdx}
+        `, dataParams);
+      }
 
       const partNos = partsResult.rows.map((r: { part_no: string }) => r.part_no);
-
-      // Ambil qty_per_unit untuk parts di halaman ini
       const qtyResult = await pool.query(`
         SELECT part_no, assy_code, qty_per_unit
         FROM bom_detail
@@ -93,6 +111,43 @@ export async function GET(request: Request) {
       for (const row of qtyResult.rows) {
         if (!qtyMap[row.part_no]) qtyMap[row.part_no] = {};
         qtyMap[row.part_no][row.assy_code] = Number(row.qty_per_unit);
+      }
+
+      if (download) {
+        const headers = ['Periode', 'Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit', ...assyCodes, 'Total', 'Total Usage'];
+        const prodQtyRow = ['PROD QTY →', '', '', '', '', '', ...assyCodes.map(assy => prodMap[assy] ?? 0), '', ''];
+        const data = [headers, prodQtyRow];
+
+        for (const part of partsResult.rows) {
+          const row = [
+            per,
+            part.part_no,
+            part.part_no_as400 || '',
+            part.supplier_name || '',
+            part.part_name || '',
+            part.unit || '',
+            ...assyCodes.map(assy => qtyMap[part.part_no]?.[assy] ?? 0),
+            assyCodes.reduce((sum, assy) => sum + (qtyMap[part.part_no]?.[assy] ?? 0), 0),
+            Math.ceil(assyCodes.reduce((sum, assy) => sum + ((qtyMap[part.part_no]?.[assy] ?? 0) * (prodMap[assy] ?? 0)), 0)),
+          ];
+          data.push(row);
+        }
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        ws['!cols'] = headers.map((header) => ({ wch: Math.min(Math.max(header.length + 2, 12), 30) }));
+        XLSX.utils.book_append_sheet(wb, ws, 'Report');
+
+        const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+        const filename = periode
+          ? `report_${periode}.xlsx`
+          : `report_${dari || 'from'}_${sampai || 'to'}.xlsx`;
+        return new Response(buffer, {
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          },
+        });
       }
 
       results[per] = {
