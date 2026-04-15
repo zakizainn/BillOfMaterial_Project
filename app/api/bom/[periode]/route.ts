@@ -60,7 +60,6 @@ export async function GET(
       `, [periode]);
       const assyCodes = assyResult.rows.map((r: {assy_code: string}) => r.assy_code);
 
-      const search_where = search ? `AND (b.part_no ILIKE $4)` : '';
       const countParams  = search ? [periode, `%${search}%`] : [periode];
       const countQuery   = search
         ? `SELECT COUNT(DISTINCT part_no) FROM bom_detail WHERE periode = $1 AND part_no ILIKE $2`
@@ -69,18 +68,26 @@ export async function GET(
       const countResult = await pool.query(countQuery, countParams);
       const totalParts  = Number(countResult.rows[0].count);
 
-      const dataParams = search
-        ? [periode, limit, offset, `%${search}%`]
-        : [periode, limit, offset];
-
-      const partsResult = await pool.query(`
-        SELECT DISTINCT b.part_no, mp.part_name, mp.unit, mp.supplier_name
-        FROM bom_detail b
-        LEFT JOIN master_part mp ON mp.part_no = b.part_no
-        WHERE b.periode = $1 ${search_where}
-        ORDER BY b.part_no
-        LIMIT $2 OFFSET $3
-      `, dataParams);
+      let partsResult;
+      if (search) {
+        const dataParams = [periode, `%${search}%`, limit, offset];
+        partsResult = await pool.query(`
+          SELECT b.part_no, mp.part_name, mp.unit, mp.supplier_name, pp.price
+          FROM (SELECT DISTINCT part_no FROM bom_detail WHERE periode = $1 AND part_no ILIKE $2 ORDER BY part_no LIMIT $3 OFFSET $4) b
+          LEFT JOIN master_part mp ON mp.part_no = b.part_no
+          LEFT JOIN part_price  pp ON pp.part_no = b.part_no AND pp.periode = $1
+          ORDER BY b.part_no
+        `, dataParams);
+      } else {
+        const dataParams = [periode, limit, offset];
+        partsResult = await pool.query(`
+          SELECT b.part_no, mp.part_name, mp.unit, mp.supplier_name, pp.price
+          FROM (SELECT DISTINCT part_no FROM bom_detail WHERE periode = $1 ORDER BY part_no LIMIT $2 OFFSET $3) b
+          LEFT JOIN master_part mp ON mp.part_no = b.part_no
+          LEFT JOIN part_price  pp ON pp.part_no = b.part_no AND pp.periode = $1
+          ORDER BY b.part_no
+        `, dataParams);
+      }
 
       const partNos = partsResult.rows.map((r: {part_no: string}) => r.part_no);
 
