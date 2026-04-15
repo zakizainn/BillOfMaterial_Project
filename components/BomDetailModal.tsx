@@ -155,12 +155,12 @@ export default function BomDetailModal({ periode, onClose }: { periode: string; 
                       <tr style={{ background: '#1e3a5f' }}>
                         <th style={{ padding: '8px 10px', color: '#fff', fontWeight: 600, textAlign: 'left', minWidth: 120, position: 'sticky', left: 0, background: '#1e3a5f', zIndex: 11, borderRight: '2px solid #fff' }}>Part No</th>
                         <th style={{ padding: '8px 10px', color: '#fff', fontWeight: 600, minWidth: 60, position: 'sticky', left: 120, background: '#1e3a5f', zIndex: 11, borderRight: '2px solid #334155' }}>Unit</th>
+                        <th style={{ padding: '8px 10px', color: '#fbbf24', fontWeight: 700, fontSize: 10, textAlign: 'right', borderLeft: '2px solid #f59e0b', minWidth: 110, position: 'sticky', left: 180, background: '#1e3a5f', zIndex: 11, borderRight: '2px solid #334155' }}>PRICE (USD)</th>
                         {assyCodes.map(a => (
                           <th key={a} style={{ padding: '6px 8px', color: '#cbd5e1', fontWeight: 500, fontSize: 10, textAlign: 'center', minWidth: 80, borderRight: '1px solid #334155', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis' }} title={a}>
                             {a.length > 14 ? a.slice(0, 13) + '…' : a}
                           </th>
                         ))}
-                        <th style={{ padding: '8px 10px', color: '#fbbf24', fontWeight: 700, fontSize: 10, textAlign: 'right', borderLeft: '2px solid #f59e0b', minWidth: 100, background: '#1c2d1e', position: 'sticky', right: 0, zIndex: 11 }}>PRICE (USD)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -169,6 +169,9 @@ export default function BomDetailModal({ periode, onClose }: { periode: string; 
                           <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: 11.5, color: '#1d4ed8', fontWeight: 700, position: 'sticky', left: 0, background: i % 2 === 0 ? '#fff' : '#f8fafc', zIndex: 2, borderRight: '2px solid #e2e8f0' }}>{part.part_no}</td>
                           <td style={{ padding: '7px 10px', textAlign: 'center', position: 'sticky', left: 120, background: i % 2 === 0 ? '#fff' : '#f8fafc', zIndex: 2, borderRight: '2px solid #e2e8f0' }}>
                             <span style={{ background: '#eff6ff', color: '#1d4ed8', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>{part.unit || '—'}</span>
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', position: 'sticky', left: 180, background: i % 2 === 0 ? '#fff' : '#f8fafc', zIndex: 2, borderLeft: '2px solid #f59e0b', borderRight: '2px solid #e2e8f0', color: part.price != null ? '#15803d' : '#d1d5db', fontWeight: part.price != null ? 700 : 400 }}>
+                            {part.price != null ? `$ ${Number(part.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '—'}
                           </td>
                           {assyCodes.map(a => {
                             const qty = qtyMap[part.part_no]?.[a];
