@@ -20,7 +20,11 @@ interface PeriodeStat {
 
 interface AssyRow {
   assy_code: string;
+  sequence: number | null;
   description: string;
+  carline: string | null;
+  destinasi: string | null;
+  komoditi: string | null;
   prod_qty: number;
   updated_at: string | null;
 }
@@ -63,7 +67,10 @@ export default function ProdPlanPage({ showToast, role }: {
       setAssyRows(data);
       // Init editMap dari data yang sudah ada
       const map: Record<string, number> = {};
-      data.forEach(r => { map[r.assy_code] = Number(r.prod_qty) || 0; });
+      data.forEach(r => { 
+        const key = `${r.assy_code}__${r.sequence ?? 'null'}`;
+        map[key] = Number(r.prod_qty) || 0; 
+      });
       setEditMap(map);
       setIsDirty(false);
     } catch { showToast('Gagal memuat detail', 'error'); }
@@ -75,9 +82,13 @@ export default function ProdPlanPage({ showToast, role }: {
     fetchDetail(periode);
   };
 
-  const handleQtyChange = (assy_code: string, val: string) => {
+  const getKey = (assy_code: string, sequence: number | null) => 
+    `${assy_code}__${sequence ?? 'null'}`;
+
+  const handleQtyChange = (assy_code: string, sequence: number | null, val: string) => {
     const num = parseFloat(val) || 0;
-    setEditMap(m => ({ ...m, [assy_code]: num }));
+    const key = getKey(assy_code, sequence);
+    setEditMap(m => ({ ...m, [key]: num }));
     setIsDirty(true);
   };
 
@@ -85,7 +96,11 @@ export default function ProdPlanPage({ showToast, role }: {
     if (!selectedPeriode) return;
     setSaving(true);
     try {
-      const rows = Object.entries(editMap).map(([assy_code, prod_qty]) => ({ assy_code, prod_qty }));
+      const rows = assyRows.map(r => ({
+        assy_code: r.assy_code,
+        sequence:  r.sequence ?? null,
+        prod_qty:  editMap[getKey(r.assy_code, r.sequence)] ?? 0,
+      }));
       const res  = await fetch(`/api/prod-plan/${encodeURIComponent(selectedPeriode)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,8 +129,12 @@ export default function ProdPlanPage({ showToast, role }: {
       let count = 0;
       for (const row of rows) {
         const assy_code = String(row['assy_code'] ?? row['ASSY CODE'] ?? row['Assy Code'] ?? '').trim();
+        const sequence  = row['sequence'] != null && row['sequence'] !== '' ? Number(row['sequence']) : null;
         const prod_qty  = parseFloat(String(row['prod_qty'] ?? row['PROD QTY'] ?? row['Prod Qty'] ?? '0')) || 0;
-        if (assy_code) { newMap[assy_code] = prod_qty; count++; }
+        if (assy_code) { 
+          const key = getKey(assy_code, sequence);
+          newMap[key] = prod_qty; count++; 
+        }
       }
       setEditMap(newMap);
       setIsDirty(true);
@@ -129,9 +148,13 @@ export default function ProdPlanPage({ showToast, role }: {
     if (!assyRows.length) return;
     const wb = XLSX.utils.book_new();
     const data = assyRows.map(r => ({
-      assy_code: r.assy_code,
+      assy_code:   r.assy_code,
+      sequence:    r.sequence ?? '',
+      carline:     r.carline || '',
+      destinasi:   r.destinasi || '',
+      komoditi:    r.komoditi || '',
       description: r.description || '',
-      prod_qty: editMap[r.assy_code] ?? 0,
+      prod_qty:    editMap[getKey(r.assy_code, r.sequence)] ?? 0,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     ws['!cols'] = [{ wch: 35 }, { wch: 30 }, { wch: 12 }];
@@ -141,10 +164,11 @@ export default function ProdPlanPage({ showToast, role }: {
 
   const filtered = assyRows.filter(r =>
     r.assy_code.toLowerCase().includes(search.toLowerCase()) ||
-    (r.description ?? '').toLowerCase().includes(search.toLowerCase())
+    (r.description ?? '').toLowerCase().includes(search.toLowerCase()) ||
+    (r.carline ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const filledCount  = assyRows.filter(r => (editMap[r.assy_code] ?? 0) > 0).length;
+  const filledCount  = assyRows.filter(r => (editMap[getKey(r.assy_code, r.sequence)] ?? 0) > 0).length;
   const totalProdQty = Object.values(editMap).reduce((s, v) => s + (v || 0), 0);
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -302,7 +326,7 @@ export default function ProdPlanPage({ showToast, role }: {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: font }}>
                 <thead>
                   <tr style={{ background: '#f8fafc' }}>
-                    {['No','Assy Code','Deskripsi','Status','Prod Qty'].map((h, i) => (
+                    {['No','Assy Code','Seq','Carline','Destinasi','Komoditi','Status','Prod Qty'].map((h, i) => (
                       <th key={h} style={{ padding: '11px 14px', textAlign: i === 4 ? 'right' : 'left', fontWeight: 600, fontSize: 11.5, color: '#6b7280', borderBottom: '1px solid #e8eaed', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -317,6 +341,12 @@ export default function ProdPlanPage({ showToast, role }: {
                         onMouseOut={e =>  (e.currentTarget.style.background = '')}>
                         <td style={{ padding: '10px 14px', color: '#9ca3af', fontSize: 12 }}>{i + 1}</td>
                         <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 12.5, color: '#1d4ed8', fontWeight: 700 }}>{r.assy_code}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          {r.sequence != null ? <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '2px 8px', fontSize: 11.5, fontWeight: 700 }}>{r.sequence}</span> : <span style={{ color: '#d1d5db' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12.5 }}>{r.carline || '—'}</td>
+                        <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12.5 }}>{r.destinasi || '—'}</td>
+                        <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12.5 }}>{r.komoditi || '—'}</td>
                         <td style={{ padding: '10px 14px', color: '#4b5563' }}>{r.description || '—'}</td>
                         <td style={{ padding: '10px 14px' }}>
                           <span style={{
@@ -330,7 +360,7 @@ export default function ProdPlanPage({ showToast, role }: {
                             <input
                               type="number" min="0" value={qty === 0 ? '' : qty}
                               placeholder="0"
-                              onChange={e => handleQtyChange(r.assy_code, e.target.value)}
+                              onChange={e => handleQtyChange(r.assy_code, r.sequence, e.target.value)}
                               style={{
                                 width: 110, padding: '6px 10px', borderRadius: 7, textAlign: 'right',
                                 border: `1.5px solid ${filled ? '#bbf7d0' : '#e2e8f0'}`,
