@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
-// GET /api/prod-plan/[periode] — detail assy + prod_qty untuk periode tertentu
+// GET /api/prod-plan/[periode]
 export async function GET(
   _: Request,
   { params }: { params: Promise<{ periode: string }> }
@@ -11,13 +11,26 @@ export async function GET(
     const result = await pool.query(`
       SELECT 
         b.assy_code,
+        b.sequence,
         ma.description,
+        ma.carline,
+        ma.destinasi,
+        ma.komoditi,
         COALESCE(p.prod_qty, 0) AS prod_qty,
         p.updated_at
-      FROM (SELECT DISTINCT assy_code FROM bom_detail WHERE periode = $1) b
-      LEFT JOIN master_assy ma ON ma.assy_code = b.assy_code
-      LEFT JOIN prod_plan p ON p.assy_code = b.assy_code AND p.periode = $1
-      ORDER BY b.assy_code
+      FROM (
+        SELECT DISTINCT assy_code, sequence 
+        FROM bom_detail 
+        WHERE periode = $1
+      ) b
+      LEFT JOIN master_assy ma 
+        ON ma.assy_code = b.assy_code 
+        AND (ma.sequence = b.sequence OR (ma.sequence IS NULL AND b.sequence IS NULL))
+      LEFT JOIN prod_plan p 
+        ON p.assy_code = b.assy_code 
+        AND p.periode = $1
+        AND (p.sequence = b.sequence OR (p.sequence IS NULL AND b.sequence IS NULL))
+      ORDER BY b.assy_code, b.sequence NULLS LAST
     `, [periode]);
     return NextResponse.json(result.rows);
   } catch (error) {
@@ -34,7 +47,9 @@ export async function POST(
   const client = await pool.connect();
   try {
     const { periode } = await params;
-    const { rows } = await request.json() as { rows: { assy_code: string; prod_qty: number }[] };
+    const { rows } = await request.json() as { 
+      rows: { assy_code: string; sequence: number | null; prod_qty: number }[] 
+    };
 
     if (!rows?.length) {
       return NextResponse.json({ error: 'Data kosong' }, { status: 400 });
@@ -44,11 +59,11 @@ export async function POST(
     let upserted = 0;
     for (const row of rows) {
       await client.query(`
-        INSERT INTO prod_plan (periode, assy_code, prod_qty)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (periode, assy_code) 
+        INSERT INTO prod_plan (periode, assy_code, sequence, prod_qty)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (periode, assy_code, sequence) 
         DO UPDATE SET prod_qty = EXCLUDED.prod_qty, updated_at = NOW()
-      `, [periode, row.assy_code, row.prod_qty ?? 0]);
+      `, [periode, row.assy_code, row.sequence ?? null, row.prod_qty ?? 0]);
       upserted++;
     }
     await client.query('COMMIT');

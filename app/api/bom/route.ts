@@ -22,7 +22,7 @@ export async function GET() {
   }
 }
 
-// POST /api/bom — upload batch rows (validasi sudah dilakukan di /api/bom/validate)
+// POST /api/bom — upload batch rows
 export async function POST(request: Request) {
   const client = await pool.connect();
   try {
@@ -32,7 +32,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Periode dan data wajib diisi' }, { status: 400 });
     }
 
-    // Kalau tidak skip validasi (fallback), cek periode dulu
     if (!skipValidation) {
       const existing = await client.query(
         'SELECT COUNT(*) FROM bom_detail WHERE periode = $1', [periode]
@@ -49,10 +48,10 @@ export async function POST(request: Request) {
     let bomInserted = 0;
     for (const row of rows as Record<string,unknown>[]) {
       await client.query(`
-        INSERT INTO bom_detail (periode, part_no, assy_code, qty_per_unit)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (periode, part_no, assy_code) DO NOTHING
-      `, [periode, row.part_no, row.assy_code, row.qty_per_unit]);
+        INSERT INTO bom_detail (periode, part_no, assy_code, sequence, qty_per_unit)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (periode, part_no, assy_code, sequence) DO NOTHING
+      `, [periode, row.part_no, row.assy_code, row.sequence ?? null, row.qty_per_unit]);
       bomInserted++;
     }
     await client.query('COMMIT');
