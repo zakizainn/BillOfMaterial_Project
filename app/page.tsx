@@ -38,10 +38,7 @@ export default function Home() {
       const sidebarElement = document.querySelector('[data-sidebar]');
       const target = e.target as Node;
       
-      // If click is outside sidebar, close it
-      if (sidebarElement && !sidebarElement.contains(target)) {
-        setSidebarOpen(false);
-      }
+
     };
 
     // Add small delay to avoid closing immediately on toggle click
@@ -116,10 +113,7 @@ export default function Home() {
             window.location.href = '/report';
           } else {
             setPage(newPage);
-            // Close sidebar after menu selection
-            if (!isMobile && sidebarOpen) {
-              setSidebarOpen(false);
-            }
+
           }
         }}
         isMobile={isMobile}
