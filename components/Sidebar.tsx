@@ -206,7 +206,7 @@ export default function Sidebar({
             style={{
               position: 'absolute',
               right: -24,
-              top: '50%',
+              top: '30%',
               transform: 'translateY(-50%)',
               background: '#ffffff',
               border: 'none',
