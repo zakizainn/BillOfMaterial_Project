@@ -6,6 +6,17 @@
   padding: 0;
 }
 
+html, body {
+  height: 100%;
+}
+
 body {
   background-color: #f1f5f9;
 }
+
+@media (min-width: 768px) {
+  .left-panel {
+    display: flex !important;
+  }
+}
+

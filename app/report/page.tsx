@@ -13,11 +13,16 @@ function fmtPeriode(p: string) {
 }
 
 interface Part { part_no: string; part_no_as400: string; part_name: string; unit: string; supplier_name: string; }
+
+// ── Mode single: prod_qty_map = { assy_code: qty }
+//    Mode gabungan: prod_qty_map = { assy_code: { periode: qty } }
 interface PeriodeData {
   assy_codes: string[];
-  prod_qty_map: Record<string, number>;
+  prod_qty_map: Record<string, number | Record<string, number>>;
   parts: Part[];
-  qty_map: Record<string, Record<string, number>>;
+  // Mode single:    qty_map = { part_no: { assy_code: qty } }
+  // Mode gabungan:  qty_map = { part_no: { assy_code: { periode: qty } } }
+  qty_map: Record<string, Record<string, number | Record<string, number>>>;
   total_parts: number;
   page: number;
   limit: number;
@@ -80,6 +85,9 @@ function ReportContent() {
   const [assySearch,     setAssySearch]     = useState('');
   const [showAssyPicker, setShowAssyPicker] = useState(false);
 
+  // Untuk mode gabungan: key result adalah "dari_sampai"
+  const gabunganKey = `${dari}_${sampai}`;
+
   // Load available periodes
   useEffect(() => {
     fetch('/api/bom').then(r => r.json()).then((data: { periode: string }[]) => {
@@ -107,13 +115,16 @@ function ReportContent() {
   }, [mode, periode, dari, sampai, selectedAssy]);
 
   const buildDownloadUrl = (targetPeriode: string, s: string) => {
+    if (mode === 'gabungan') {
+      return `/api/report?dari=${dari}&sampai=${sampai}${selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : ''}&search=${encodeURIComponent(s)}&download=true`;
+    }
     const base = `/api/report?periode=${encodeURIComponent(targetPeriode)}${selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : ''}`;
     return `${base}&search=${encodeURIComponent(s)}&download=true`;
   };
 
   const handleExport = () => {
     const targetPeriode = mode === 'single' ? periode : activePer;
-    if (!targetPeriode) return;
+    if (!targetPeriode && mode === 'single') return;
     const url = buildDownloadUrl(targetPeriode, search);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -125,15 +136,28 @@ function ReportContent() {
     try {
       const res  = await fetch(buildUrl(p, s));
       const data = await res.json();
+      const fetchedResults = data.results ?? {};
       setPeriodes(data.periodes ?? []);
-      setResults(data.results ?? {});
-      setActivePer((data.periodes ?? [])[0] || '');
+      setResults(fetchedResults);
+
+      // Untuk mode single: activePer = periode pertama
+      // Untuk mode gabungan: activePer = gabunganKey
+      if (mode === 'gabungan') {
+        setActivePer(fetchedResults[gabunganKey] ? gabunganKey : Object.keys(fetchedResults)[0] ?? '');
+      } else {
+        setActivePer((data.periodes ?? [])[0] || '');
+      }
     } catch { /**/ }
     setLoading(false);
-  }, [buildUrl]);
+  }, [buildUrl, mode, dari, sampai, gabunganKey]);
 
   const handleLoad = () => {
-    setPage(1); setSearch(''); setHasLoaded(true);
+    setPage(1);
+    setSearch('');
+    setHasLoaded(true);
+    setResults({});
+    setPeriodes([]);
+    setActivePer('');
     fetchData(1, '');
   };
 
@@ -147,7 +171,17 @@ function ReportContent() {
     fetchData(1, val);
   };
 
-  const currentData = results[activePer];
+  const jumlahBulan = (() => {
+    if (mode !== 'gabungan' || !dari || !sampai) return 0;
+    const [dY,dM] = dari.split('-').map(Number);
+    const [sY,sM] = sampai.split('-').map(Number);
+    return (sY - dY) * 12 + (sM - dM) + 1;
+  })();
+  const isExceedsMax = jumlahBulan > 12;
+
+  const currentData = mode === 'gabungan'
+    ? results[gabunganKey] ?? results[activePer] ?? Object.values(results)[0]
+    : results[activePer] ?? Object.values(results)[0];
   const assyCodes   = currentData?.assy_codes   ?? [];
   const prodQtyMap  = currentData?.prod_qty_map ?? {};
   const parts       = currentData?.parts        ?? [];
@@ -155,20 +189,75 @@ function ReportContent() {
   const totalParts  = currentData?.total_parts  ?? 0;
   const totalPages  = Math.ceil(totalParts / LIMIT) || 1;
 
-  const calcTotalUsage = (part_no: string) => {
+  // ── Helper: ambil qty BOM per part+assy (per periode di gabungan)
+  const findKey = (map: Record<string, unknown>, key: string) => {
+    if (key in map) return key;
+    const trimmedKey = key.trim();
+    return Object.keys(map).find(k => k.trim() === trimmedKey);
+  };
+
+  const getBomQty = (part_no: string, assy: string, per?: string): number => {
+    const partMap = qtyMap[part_no] as Record<string, unknown> | undefined;
+    if (!partMap) return 0;
+    const assyKey = findKey(partMap, assy);
+    if (!assyKey) return 0;
+    const val = partMap[assyKey];
+    if (val === undefined || val === null) return 0;
+    if (mode === 'gabungan' && per) {
+      return Number(((val as Record<string, number>)[per] ?? 0));
+    }
+    return Number(val as number);
+  };
+
+  // ── Helper: ambil prod_qty per assy (per periode di gabungan)
+  const getProdQty = (assy: string, per?: string): number => {
+    const assyKey = findKey(prodQtyMap, assy);
+    if (!assyKey) return 0;
+    const val = prodQtyMap[assyKey];
+    if (val === undefined || val === null) return 0;
+    if (mode === 'gabungan' && per) {
+      return Number(((val as Record<string, number>)[per] ?? 0));
+    }
+    return Number(val as number);
+  };
+
+  // ── Total usage: sum(bom_qty × prod_qty) per part, semua assy × semua periode
+  const calcTotalUsage = (part_no: string): number => {
     let sum = 0;
-    for (const assy of assyCodes) {
-      sum += (qtyMap[part_no]?.[assy] ?? 0) * (prodQtyMap[assy] ?? 0);
+    if (mode === 'gabungan') {
+      for (const assy of assyCodes) {
+        for (const per of periodes) {
+          sum += getBomQty(part_no, assy, per) * getProdQty(assy, per);
+        }
+      }
+    } else {
+      for (const assy of assyCodes) {
+        sum += getBomQty(part_no, assy) * getProdQty(assy);
+      }
     }
     return Math.ceil(sum);
   };
 
-  const calcAssyColSum = (assy: string) =>
-    parts.reduce((s, p) => s + (qtyMap[p.part_no]?.[assy] ?? 0), 0);
+  // ── Total BOM qty per kolom (assy×periode di gabungan, assy di single)
+  const calcAssyColSum = (assy: string, per?: string): number =>
+    parts.reduce((s, p) => s + getBomQty(p.part_no, assy, per), 0);
+
+  // ── Footer: total usage semua part di halaman ini
+  const calcFooterTotalUsage = (): number =>
+    parts.reduce((s, p) => s + calcTotalUsage(p.part_no), 0);
 
   const filteredAssy = allAssyCodes.filter(a =>
     !assySearch || a.toLowerCase().includes(assySearch.toLowerCase())
   );
+
+  // ── Apakah ada prod qty yang terisi?
+  const hasProdQty = mode === 'gabungan'
+    ? Object.values(prodQtyMap).some(v => typeof v === 'object' ? Object.values(v as Record<string,number>).some(q => q > 0) : Number(v) > 0)
+    : Object.values(prodQtyMap).some(v => Number(v) > 0);
+
+  const hasProdBomOverlap = mode === 'gabungan'
+    ? parts.some(part => assyCodes.some(assy => periodes.some(per => getBomQty(part.part_no, assy, per) > 0 && getProdQty(assy, per) > 0)))
+    : parts.some(part => assyCodes.some(assy => getBomQty(part.part_no, assy) > 0 && getProdQty(assy) > 0));
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: font }}>
@@ -246,7 +335,7 @@ function ReportContent() {
                   <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {idx === 1 && <span style={{ color: '#9ca3af' }}>→</span>}
                     <span style={{ fontSize: 12.5, color: '#374151', fontWeight: 500 }}>{item.label}:</span>
-                    <select value={item.val} onChange={e => item.set(e.target.value)} style={{ padding: '7px 12px', borderRadius: 8, border: '1.5px solid #e2e8f0', fontSize: 13, fontFamily: font, background: '#fff', cursor: 'pointer' }}>
+                    <select value={item.val} onChange={e => item.set(e.target.value)} style={{ padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${isExceedsMax ? '#ef4444' : '#e2e8f0'}`, fontSize: 13, fontFamily: font, background: '#fff', cursor: 'pointer' }}>
                       {availPer.map(p => <option key={p} value={p}>{fmtPeriode(p)}</option>)}
                     </select>
                   </div>
@@ -286,14 +375,19 @@ function ReportContent() {
               </>
             )}
 
-            <button onClick={handleLoad} style={{ padding: '8px 24px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#1e3a8a,#2563eb)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 3px 10px rgba(37,99,235,.3)', letterSpacing: 0.1 }}>
+            <button onClick={handleLoad} disabled={mode === 'gabungan' && isExceedsMax} style={{ padding: '8px 24px', borderRadius: 8, border: 'none', background: mode === 'gabungan' && isExceedsMax ? '#d1d5db' : 'linear-gradient(135deg,#1e3a8a,#2563eb)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: mode === 'gabungan' && isExceedsMax ? 'not-allowed' : 'pointer', fontFamily: font, boxShadow: mode === 'gabungan' && isExceedsMax ? 'none' : '0 3px 10px rgba(37,99,235,.3)', letterSpacing: 0.1 }}>
               🔍 Tampilkan
             </button>
+            {mode === 'gabungan' && isExceedsMax && (
+              <div style={{ marginLeft: 0, padding: '10px 14px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', fontSize: 13, color: '#991b1b', fontWeight: 500 }}>
+                ⚠️ Maksimal 12 bulan. Anda memilih {jumlahBulan} bulan.
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Periode tabs (mode gabungan) */}
-        {hasLoaded && periodes.length > 1 && (
+        {/* Periode tabs (mode single hanya, jika multi-periode) */}
+        {hasLoaded && mode === 'single' && periodes.length > 1 && (
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>
             {periodes.map(p => (
               <button key={p} onClick={() => { setActivePer(p); setPage(1); }} style={{
@@ -330,17 +424,26 @@ function ReportContent() {
                   onBlur={e =>  e.target.style.borderColor = '#e2e8f0'}
                 />
               </div>
-              <button onClick={handleExport} disabled={(mode === 'single' ? !periode : !activePer) || loading} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: (mode === 'single' ? !!periode : !!activePer) ? '#10b981' : '#d1d5db', color: '#fff', fontSize: 13, fontWeight: 700, cursor: (mode === 'single' ? !!periode : !!activePer) ? 'pointer' : 'not-allowed', fontFamily: font, whiteSpace: 'nowrap' }}>
+              <button onClick={handleExport} disabled={loading} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: !loading ? '#10b981' : '#d1d5db', color: '#fff', fontSize: 13, fontWeight: 700, cursor: !loading ? 'pointer' : 'not-allowed', fontFamily: font, whiteSpace: 'nowrap' }}>
                 ⬇️ Ekspor
               </button>
               <span style={{ fontSize: 12.5, color: '#6b7280' }}>
                 <b style={{ color: '#111827' }}>{totalParts.toLocaleString()}</b> part ·
                 <b style={{ color: '#111827' }}> {assyCodes.length}</b> ASSY ·
-                Periode: <b style={{ color: '#1d4ed8' }}>{fmtPeriode(activePer)}</b>
+                Periode: <b style={{ color: '#1d4ed8' }}>
+                  {mode === 'gabungan'
+                    ? `${periodes.map(p => fmtPeriode(p)).join(' · ')} (${periodes.length} bulan)`
+                    : fmtPeriode(activePer)}
+                </b>
               </span>
-              {!Object.values(prodQtyMap).some(v => v > 0) && (
+              {!hasProdQty && (
                 <span style={{ background: '#fef9c3', color: '#854d0e', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, fontWeight: 600 }}>
                   ⚠ Prod Qty belum diisi Finance
+                </span>
+              )}
+              {mode === 'gabungan' && hasLoaded && !loading && !hasProdBomOverlap && (
+                <span style={{ background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, fontWeight: 600 }}>
+                  ⚠ Tidak ada overlap PROD QTY × BOM untuk periode yang dipilih. Cek data prod_plan dan bom_detail.
                 </span>
               )}
             </div>
@@ -356,34 +459,88 @@ function ReportContent() {
                     <th style={{ padding: '9px 12px', color: '#cbd5e1', fontWeight: 600, fontSize: 10, background: '#1e3a5f', borderRight: '1px solid #334155', minWidth: 110 }}>SUPPLIER</th>
                     <th style={{ padding: '9px 12px', color: '#cbd5e1', fontWeight: 600, fontSize: 10, background: '#1e3a5f', borderRight: '1px solid #334155', minWidth: 150 }}>PART NAME</th>
                     <th style={{ padding: '9px 12px', color: '#cbd5e1', fontWeight: 600, fontSize: 10, textAlign: 'center', background: '#1e3a5f', borderRight: '2px solid #475569', minWidth: 55 }}>UNIT</th>
-                    {assyCodes.map(a => (
-                      <th key={a} style={{ padding: '6px 8px', color: '#93c5fd', fontWeight: 600, fontSize: 9.5, textAlign: 'center', borderRight: '1px solid #334155', minWidth: 72 }} title={a}>
-                        {a.length > 13 ? a.slice(0,12)+'…' : a}
-                      </th>
-                    ))}
+                    {mode === 'gabungan' ? (
+                      assyCodes.map(a => (
+                        <th key={a} colSpan={periodes.length} style={{ padding: '6px 8px', color: '#93c5fd', fontWeight: 600, fontSize: 9.5, textAlign: 'center', borderRight: '1px solid #334155' }} title={a}>
+                          {a}
+                        </th>
+                      ))
+                    ) : (
+                      assyCodes.map(a => (
+                        <th key={a} style={{ padding: '6px 8px', color: '#93c5fd', fontWeight: 600, fontSize: 9.5, textAlign: 'center', borderRight: '1px solid #334155', minWidth: 100 }} title={a}>
+                          {a}
+                        </th>
+                      ))
+                    )}
                     <th style={{ padding: '9px 10px', color: '#fbbf24', fontWeight: 700, fontSize: 10, textAlign: 'right', borderLeft: '2px solid #f59e0b', minWidth: 72, background: '#1c2d1e', position: 'sticky', right: 90 }}>TOTAL</th>
                     <th style={{ padding: '9px 10px', color: '#4ade80', fontWeight: 700, fontSize: 10, textAlign: 'right', borderLeft: '2px solid #16a34a', minWidth: 90, background: '#1c2d1e', position: 'sticky', right: 0 }}>TOTAL USAGE</th>
                   </tr>
-                  {/* Row 2: Prod Qty */}
+
+                  {/* Row 2: sub-header periode (mode gabungan only) */}
+                  {mode === 'gabungan' && periodes.length > 0 && (
+                    <tr style={{ background: '#1a2f3f' }}>
+                      <td style={{ background: '#1a2f3f', borderRight: '1px solid #334155' }} />
+                      <td style={{ background: '#1a2f3f', borderRight: '1px solid #334155' }} />
+                      <td style={{ background: '#1a2f3f', borderRight: '1px solid #334155' }} />
+                      <td style={{ background: '#1a2f3f', borderRight: '1px solid #334155' }} />
+                      <td style={{ background: '#1a2f3f', borderRight: '2px solid #475569' }} />
+                      {assyCodes.flatMap(a =>
+                        periodes.map(p => {
+                          const [y, m] = p.split('-').map(Number);
+                          const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1];
+                          return (
+                            <td key={`${a}-${p}`} style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 500, fontSize: 9, color: '#94a3b8', borderRight: '1px solid #334155', background: '#1a2f3f', minWidth: 60 }}>
+                              {month} {y}
+                            </td>
+                          );
+                        })
+                      )}
+                      <td style={{ borderLeft: '2px solid #f59e0b', background: '#1a2f3f', position: 'sticky', right: 90 }} />
+                      <td style={{ borderLeft: '2px solid #16a34a', background: '#1a2f3f', position: 'sticky', right: 0 }} />
+                    </tr>
+                  )}
+
+                  {/* Row 3: Prod Qty */}
                   <tr style={{ background: '#0f172a' }}>
                     <td style={{ padding: '6px 12px', color: '#f59e0b', fontWeight: 700, fontSize: 10.5, position: 'sticky', left: 0, background: '#0f172a', zIndex: 11, borderRight: '1px solid #1e293b' }}>PROD QTY →</td>
                     <td style={{ background: '#0f172a', borderRight: '1px solid #1e293b' }} />
                     <td style={{ background: '#0f172a', borderRight: '1px solid #1e293b' }} />
                     <td style={{ background: '#0f172a', borderRight: '1px solid #1e293b' }} />
                     <td style={{ background: '#0f172a', borderRight: '2px solid #475569' }} />
-                    {assyCodes.map(a => (
-                      <td key={a} style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: (prodQtyMap[a] ?? 0) > 0 ? '#fbbf24' : '#475569', borderRight: '1px solid #1e293b' }}>
-                        {(prodQtyMap[a] ?? 0) > 0 ? Number(prodQtyMap[a]).toLocaleString() : '—'}
-                      </td>
-                    ))}
+                    {mode === 'gabungan' ? (
+                      assyCodes.flatMap(a =>
+                        periodes.map(p => {
+                          const qty = getProdQty(a, p);
+                          return (
+                            <td key={`${a}-${p}`} style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: qty > 0 ? '#fbbf24' : '#475569', borderRight: '1px solid #1e293b' }}>
+                              {qty > 0 ? qty.toLocaleString() : '—'}
+                            </td>
+                          );
+                        })
+                      )
+                    ) : (
+                      assyCodes.map(a => {
+                        const qty = getProdQty(a);
+                        return (
+                          <td key={a} style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: qty > 0 ? '#fbbf24' : '#475569', borderRight: '1px solid #1e293b' }}>
+                            {qty > 0 ? qty.toLocaleString() : '—'}
+                          </td>
+                        );
+                      })
+                    )}
                     <td style={{ borderLeft: '2px solid #f59e0b', background: '#0f172a', position: 'sticky', right: 90 }} />
                     <td style={{ borderLeft: '2px solid #16a34a', background: '#0f172a', position: 'sticky', right: 0 }} />
                   </tr>
                 </thead>
+
                 <tbody>
                   {parts.map((part, i) => {
                     const totalUsage = calcTotalUsage(part.part_no);
-                    const totalQty   = assyCodes.reduce((s, a) => s + (qtyMap[part.part_no]?.[a] ?? 0), 0);
+                    // Total BOM qty: sum semua kolom (assy × periode di gabungan)
+                    const totalQty = mode === 'gabungan'
+                      ? assyCodes.reduce((s, a) => s + periodes.reduce((ps, p) => ps + getBomQty(part.part_no, a, p), 0), 0)
+                      : assyCodes.reduce((s, a) => s + getBomQty(part.part_no, a), 0);
+
                     return (
                       <tr key={part.part_no} style={{ background: i%2===0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #f1f5f9' }}
                         onMouseOver={e => (e.currentTarget.style.background = '#eff6ff')}
@@ -395,14 +552,27 @@ function ReportContent() {
                         <td style={{ padding: '7px 12px', textAlign: 'center', borderRight: '2px solid #e2e8f0' }}>
                           <span style={{ background: '#eff6ff', color: '#1d4ed8', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{part.unit || '—'}</span>
                         </td>
-                        {assyCodes.map(a => {
-                          const qty = qtyMap[part.part_no]?.[a];
-                          return (
-                            <td key={a} style={{ padding: '7px 8px', textAlign: 'center', color: qty ? '#111827' : '#e5e7eb', fontWeight: qty ? 600 : 400, borderRight: '1px solid #f1f5f9', fontSize: 11 }}>
-                              {qty ? Number(qty).toLocaleString() : '·'}
-                            </td>
-                          );
-                        })}
+                        {mode === 'gabungan' ? (
+                          assyCodes.flatMap(a =>
+                            periodes.map(p => {
+                              const qty = getBomQty(part.part_no, a, p);
+                              return (
+                                <td key={`${a}-${p}`} style={{ padding: '7px 8px', textAlign: 'center', color: qty ? '#111827' : '#e5e7eb', fontWeight: qty ? 600 : 400, borderRight: '1px solid #f1f5f9', fontSize: 11 }}>
+                                  {qty ? Number(qty).toLocaleString() : '·'}
+                                </td>
+                              );
+                            })
+                          )
+                        ) : (
+                          assyCodes.map(a => {
+                            const qty = getBomQty(part.part_no, a);
+                            return (
+                              <td key={a} style={{ padding: '7px 8px', textAlign: 'center', color: qty ? '#111827' : '#e5e7eb', fontWeight: qty ? 600 : 400, borderRight: '1px solid #f1f5f9', fontSize: 11 }}>
+                                {qty ? Number(qty).toLocaleString() : '·'}
+                              </td>
+                            );
+                          })
+                        )}
                         <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: '#92400e', borderLeft: '2px solid #fde68a', background: i%2===0 ? '#fffbeb' : '#fef9c3', fontSize: 11, position: 'sticky', right: 90 }}>
                           {totalQty > 0 ? totalQty.toLocaleString() : '—'}
                         </td>
@@ -413,6 +583,7 @@ function ReportContent() {
                     );
                   })}
                 </tbody>
+
                 {/* Footer */}
                 <tfoot>
                   <tr style={{ background: '#1e3a5f' }}>
@@ -421,14 +592,24 @@ function ReportContent() {
                     <td style={{ background: '#1e3a5f', borderRight: '1px solid #334155' }} />
                     <td style={{ background: '#1e3a5f', borderRight: '1px solid #334155' }} />
                     <td style={{ background: '#1e3a5f', borderRight: '2px solid #475569' }} />
-                    {assyCodes.map(a => (
-                      <td key={a} style={{ padding: '8px 8px', textAlign: 'center', color: '#fbbf24', fontWeight: 700, fontSize: 11, borderRight: '1px solid #334155' }}>
-                        {calcAssyColSum(a).toLocaleString()}
-                      </td>
-                    ))}
+                    {mode === 'gabungan' ? (
+                      assyCodes.flatMap(a =>
+                        periodes.map(p => (
+                          <td key={`${a}-${p}`} style={{ padding: '8px 8px', textAlign: 'center', color: '#fbbf24', fontWeight: 700, fontSize: 11, borderRight: '1px solid #334155' }}>
+                            {calcAssyColSum(a, p).toLocaleString()}
+                          </td>
+                        ))
+                      )
+                    ) : (
+                      assyCodes.map(a => (
+                        <td key={a} style={{ padding: '8px 8px', textAlign: 'center', color: '#fbbf24', fontWeight: 700, fontSize: 11, borderRight: '1px solid #334155' }}>
+                          {calcAssyColSum(a).toLocaleString()}
+                        </td>
+                      ))
+                    )}
                     <td style={{ borderLeft: '2px solid #f59e0b', background: '#1e3a5f', position: 'sticky', right: 90 }} />
                     <td style={{ padding: '8px 10px', textAlign: 'right', color: '#4ade80', fontWeight: 700, fontSize: 11, borderLeft: '2px solid #16a34a', background: '#1e3a5f', position: 'sticky', right: 0 }}>
-                      {parts.reduce((s, p) => s + calcTotalUsage(p.part_no), 0).toLocaleString()}
+                      {calcFooterTotalUsage().toLocaleString()}
                     </td>
                   </tr>
                 </tfoot>

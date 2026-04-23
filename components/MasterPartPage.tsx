@@ -269,7 +269,7 @@ export default function MasterPartPage({ showToast, role }: {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111827', margin: 0 }}>Master Part</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#111827', margin: 0 }}>Master Part</h1>
           <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Daftar Part / Material — <b style={{ color: '#374151' }}>{data.length}</b> total part</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>

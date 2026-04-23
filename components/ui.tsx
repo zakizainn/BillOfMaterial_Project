@@ -39,14 +39,15 @@ const tokens = {
 export function Badge({ active }: { active: boolean }) {
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '3px 10px', borderRadius: 20, fontSize: 11.5, fontWeight: 600,
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '2px 8px', borderRadius: 12, fontSize: 10.5, fontWeight: 600,
       background: active ? tokens.successLight : tokens.dangerLight,
       color: active ? tokens.success : tokens.danger,
       border: `1px solid ${active ? '#bbf7d0' : tokens.dangerBorder}`,
-      whiteSpace: 'nowrap', letterSpacing: 0.2,
+      whiteSpace: 'nowrap', letterSpacing: 0.1,
+      minWidth: 52, justifyContent: 'center',
     }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: active ? tokens.success : tokens.danger, flexShrink: 0 }} />
+      <span style={{ width: 4, height: 4, borderRadius: '50%', background: active ? tokens.success : tokens.danger, flexShrink: 0 }} />
       {active ? 'Active' : 'Inactive'}
     </span>
   );
@@ -450,21 +451,13 @@ export function SidebarHeader({ children }: { children: ReactNode }) {
       padding: '20px 16px', borderBottom: `1px solid ${tokens.border}`,
       display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
     }}>
-      <div style={{
-        width: 38, height: 38, borderRadius: 10,
-        background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 18, boxShadow: '0 2px 10px rgba(37,99,235,.25)',
-        flexShrink: 0,
-      }}>📋</div>
+      <img src="/yazaki-logo.jpeg" alt="YAZAKI Logo" style={{
+              height: 38, objectFit: 'contain', flexShrink: 0,
+      }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontWeight: 800, fontSize: 14, color: tokens.gray900,
-          lineHeight: 1.2, letterSpacing: -0.3,
-        }}>BOM Database</div>
-        <div style={{
           fontSize: 10, color: tokens.gray400, fontWeight: 500,
-          letterSpacing: 0.2, marginTop: 2,
+          letterSpacing: 0.2,
         }}>Master Data</div>
       </div>
     </div>

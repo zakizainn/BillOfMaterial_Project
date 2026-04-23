@@ -313,19 +313,16 @@ export default function MasterAssyPage({ showToast, role }: {
   return (
     <div style={{ fontFamily: font }}>
       {/* Role banner */}
-      <div style={{ background: banner.bg, border: `1px solid ${banner.border}`, borderRadius: 10, padding: '10px 16px', marginBottom: 20, fontSize: 13, color: banner.color, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 3px rgba(0,0,0,.04)', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: banner.color, borderRadius: '3px 0 0 3px' }} />
-        <span style={{ fontSize: 15, flexShrink: 0, marginLeft: 6 }}>{banner.icon}</span>
-        <span dangerouslySetInnerHTML={{ __html: banner.text }} />
-      </div>
+      <div style={{ background: banner.bg, border: `1px solid ${banner.border}`, borderRadius: 10, padding: '10px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: banner.color }}
+        dangerouslySetInnerHTML={{ __html: `${banner.icon} ${banner.text}` }} />
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: -0.5 }}>Master ASSY</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0 }}>Master ASSY</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             Daftar Assembly — <b style={{ color: '#0f172a' }}>{data.length.toLocaleString()}</b> total &nbsp;·&nbsp;
-            <b style={{ color: '#16a34a' }}>{data.filter(r => r.is_active).length}</b> aktif
+            <b style={{ color: '#16a34a' }}>{data.filter(r => r.is_active).length.toLocaleString()}</b> aktif
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -343,6 +340,12 @@ export default function MasterAssyPage({ showToast, role }: {
             </>
           )}
         </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: 'flex', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
+        <StatCard label="Total ASSY" value={data.length} color="#1d4ed8" />
+        <StatCard label="Active" value={data.filter(r => r.is_active).length} color="#16a34a" />
       </div>
 
       {/* Table */}
