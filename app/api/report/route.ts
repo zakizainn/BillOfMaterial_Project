@@ -138,66 +138,128 @@ export async function GET(request: Request) {
       }
 
       if (download) {
-        // Untuk download gabungan: buat SATU sheet dengan periode sebagai nested columns
-        // Struktur: 
-        // Row 1: Headers - Part No | Part No AS400 | Supplier | Part Name | Unit | [Assy1 Col Header] | [Assy2 Col Header] | ... | Total | Total Usage
-        // Row 2: Periode - (blank x5) | Mar 2026 | Apr 2026 | May 2026 | Mar 2026 | Apr 2026 | May 2026 | ... | (blank x2)
-        // Row 3: PROD QTY data
+        // Untuk download gabungan: buat SATU sheet dengan struktur 2-level header
+        // Struktur:
+        // Row 1: Base headers (Part No, Part No AS400, Supplier, Part Name, Unit) + ASSY names (merged cells) + Total headers
+        // Row 2: Empty cells untuk base headers + Periode names (Mar 2026, Apr 2026, dll) + Empty untuk Total
+        // Row 3: PROD QTY row dengan nilai per ASSY×Periode
         // Row 4+: Part data
         
         const wb = XLSX.utils.book_new();
         
-        // Build structure untuk headers dan periode
         const baseHeaders = ['Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit'];
-        const assyPeriodeMapping: Array<{ assy: string; periode: string }> = [];
+        const baseColCount = baseHeaders.length;
         
+        // Hitung total kolom per ASSY (= jumlah periode)
+        const periodesPerAssy = periodeList.length;
+        
+        // Row 1: Main headers (dengan ASSY names diulang untuk setiap periode)
+        const row1: string[] = [...baseHeaders];
         for (const assy of assyCodes) {
-          for (const per of periodeList) {
-            assyPeriodeMapping.push({ assy, periode: per });
+          for (let i = 0; i < periodesPerAssy; i++) {
+            row1.push(assy);
           }
         }
-        
-        // Row 1: Main headers
-        const assyHeaders = assyCodes.map(a => a);
-        const headers = [...baseHeaders, ...assyHeaders, 'Total', 'Total Usage'];
+        row1.push('Total');
+        row1.push('Total Usage');
         
         // Row 2: Periode sub-headers
-        const periodeRow = ['', '', '', '', '', ...assyPeriodeMapping.map(ap => ap.periode), '', ''];
+        const row2: string[] = new Array(baseColCount).fill('');
+        for (const assy of assyCodes) {
+          for (const per of periodeList) {
+            const [y, m] = per.split('-').map(Number);
+            const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1];
+            row2.push(`${month} ${y}`);
+          }
+        }
+        row2.push('');
+        row2.push('');
         
         // Row 3: PROD QTY row
-        const prodQtyRow = ['PROD QTY →', '', '', '', '', ...assyPeriodeMapping.map(ap => prodMap[ap.assy]?.[ap.periode] ?? 0), '', ''];
+        const row3: (string | number)[] = ['PROD QTY →', '', '', '', ''];
+        for (const assy of assyCodes) {
+          for (const per of periodeList) {
+            row3.push(prodMap[assy]?.[per] ?? 0);
+          }
+        }
+        row3.push('');
+        row3.push('');
         
-        // Build data dengan headers, periode, prodqty, dan part data
-        const data = [headers, periodeRow, prodQtyRow];
+        // Build data rows (mulai dari row 4)
+        const data = [row1, row2, row3];
         for (const part of partsResult.rows) {
-          const row = [
+          const row: (string | number)[] = [
             part.part_no,
             part.part_no_as400 || '',
             part.supplier_name || '',
             part.part_name || '',
             part.unit || '',
-            ...assyPeriodeMapping.map(ap => qtyMap[part.part_no]?.[ap.assy]?.[ap.periode] ?? 0),
-            // Total BOM: sum dari semua assy×periode untuk part ini
-            assyPeriodeMapping.reduce((sum, ap) => sum + (qtyMap[part.part_no]?.[ap.assy]?.[ap.periode] ?? 0), 0),
-            // Total Usage: sum(bom_qty × prod_qty) untuk semua assy×periode
-            Math.ceil(assyPeriodeMapping.reduce((sum, ap) => sum + ((qtyMap[part.part_no]?.[ap.assy]?.[ap.periode] ?? 0) * (prodMap[ap.assy]?.[ap.periode] ?? 0)), 0)),
           ];
+          
+          // Add qty per ASSY×Periode
+          for (const assy of assyCodes) {
+            for (const per of periodeList) {
+              row.push(qtyMap[part.part_no]?.[assy]?.[per] ?? 0);
+            }
+          }
+          
+          // Total BOM
+          let totalBom = 0;
+          for (const assy of assyCodes) {
+            for (const per of periodeList) {
+              totalBom += qtyMap[part.part_no]?.[assy]?.[per] ?? 0;
+            }
+          }
+          row.push(totalBom);
+          
+          // Total Usage
+          let totalUsage = 0;
+          for (const assy of assyCodes) {
+            for (const per of periodeList) {
+              const bomQty = qtyMap[part.part_no]?.[assy]?.[per] ?? 0;
+              const prodQty = prodMap[assy]?.[per] ?? 0;
+              totalUsage += bomQty * prodQty;
+            }
+          }
+          row.push(Math.ceil(totalUsage));
+          
           data.push(row);
         }
         
-        // Create worksheet & workbook
+        // Create worksheet & workbook dengan merged cells
         const ws = XLSX.utils.aoa_to_sheet(data);
-        // Sesuaikan column widths
+        
+        // Merge ASSY header cells di row 1
+        const merges = [];
+        let colIdx = baseColCount;
+        for (const assy of assyCodes) {
+          const startCol = colIdx;
+          const endCol = colIdx + periodesPerAssy - 1;
+          merges.push({
+            s: { r: 0, c: startCol }, // Start row 1, start column
+            e: { r: 0, c: endCol }     // End row 1, end column
+          });
+          colIdx += periodesPerAssy;
+        }
+        ws['!merges'] = merges;
+        
+        // Column widths
         const colWidths = [
           { wch: 15 }, // Part No
           { wch: 18 }, // Part No AS400
           { wch: 25 }, // Supplier
           { wch: 30 }, // Part Name
           { wch: 10 }, // Unit
-          ...assyPeriodeMapping.map(() => ({ wch: 12 })), // ASSY columns
-          { wch: 12 }, // Total
-          { wch: 12 }, // Total Usage
         ];
+        // Add columns untuk ASSY×Periode
+        for (const assy of assyCodes) {
+          for (const per of periodeList) {
+            colWidths.push({ wch: 12 });
+          }
+        }
+        colWidths.push({ wch: 12 }); // Total
+        colWidths.push({ wch: 12 }); // Total Usage
+        
         ws['!cols'] = colWidths;
         XLSX.utils.book_append_sheet(wb, ws, `Combined_${dari}_${sampai}`);
         
@@ -306,12 +368,17 @@ export async function GET(request: Request) {
       }
 
       if (download) {
-        const headers = ['Periode', 'Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit', ...assyCodes, 'Total BOM', 'Total Usage'];
-        const prodQtyRow = ['PROD QTY →', '', '', '', '', '', ...assyCodes.map(a => prodMap[a] ?? 0), '', ''];
+        // Struktur yang sama dengan halaman web untuk mode single
+        // Row 1: Headers - Part No | Part No AS400 | Supplier | Part Name | Unit | [ASSY1] | [ASSY2] | ... | Total BOM | Total Usage
+        // Row 2: PROD QTY - (label + blank cells) | [qty1] | [qty2] | ... | (blank x2)
+        // Row 3+: Part data
+        
+        const headers = ['Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit', ...assyCodes, 'Total BOM', 'Total Usage'];
+        const prodQtyRow = ['PROD QTY →', '', '', '', '', ...assyCodes.map(a => prodMap[a] ?? 0), '', ''];
         const data = [headers, prodQtyRow];
+        
         for (const part of partsResult.rows) {
           const row = [
-            per,
             part.part_no,
             part.part_no_as400 || '',
             part.supplier_name || '',
@@ -323,10 +390,24 @@ export async function GET(request: Request) {
           ];
           data.push(row);
         }
+        
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(data);
-        ws['!cols'] = headers.map(h => ({ wch: Math.min(Math.max(h.length + 2, 12), 30) }));
-        XLSX.utils.book_append_sheet(wb, ws, 'Report');
+        
+        // Sesuaikan column widths untuk tampilan yang lebih baik
+        const colWidths = [
+          { wch: 15 }, // Part No
+          { wch: 18 }, // Part No AS400
+          { wch: 25 }, // Supplier
+          { wch: 30 }, // Part Name
+          { wch: 10 }, // Unit
+          ...assyCodes.map(() => ({ wch: 12 })), // ASSY columns
+          { wch: 12 }, // Total BOM
+          { wch: 12 }, // Total Usage
+        ];
+        ws['!cols'] = colWidths;
+        
+        XLSX.utils.book_append_sheet(wb, ws, `Report_${per}`);
         const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
         return new Response(buffer, {
           headers: {
