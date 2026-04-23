@@ -8,6 +8,7 @@ interface SidebarProps {
   currentPage: 'assy' | 'part' | 'bom' | 'prodplan' | 'report';
   onPageChange: (page: 'assy' | 'part' | 'bom' | 'prodplan' | 'report') => void;
   isMobile: boolean;
+  onLogout: () => void;
 }
 
 const tabs = [
@@ -58,6 +59,7 @@ export default function Sidebar({
   currentPage,
   onPageChange,
   isMobile,
+  onLogout,
 }: SidebarProps) {
   const { data: session } = useSession();
   const role = (session?.user as { role?: string })?.role ?? '';
@@ -106,63 +108,128 @@ export default function Sidebar({
             padding: isOpen ? '16px' : '12px 8px',
             borderBottom: 'none',
             display: 'flex',
-            flexDirection: isOpen ? 'row' : 'column',
+            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: isOpen ? 'space-between' : 'center',
-            gap: isOpen ? 8 : 12,
+            justifyContent: 'flex-start',
+            gap: 12,
             flexShrink: 0,
             background: 'transparent',
-            minHeight: isOpen ? 72 : 'auto',
             transition: 'all 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
+            position: 'relative',
           }}
         >
-          {/* Logo */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            flex: isOpen ? 1 : 'none',
-            width: isOpen ? 'auto' : '100%',
-          }}>
-            <img
-              src="/yazaki-logo.jpeg"
-              alt="YAZAKI Logo"
-              style={{ 
-                height: isOpen ? 40 : 44, 
-                width: 'auto',
-                maxWidth: isOpen ? 'none' : 52,
-                objectFit: 'contain',
-                transition: 'all 0.3s ease',
+          {/* User Role at Top (moved from bottom) */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isOpen ? 'flex-start' : 'center',
+              gap: isOpen ? 12 : 0,
+              padding: isOpen ? '12px 14px' : '8px',
+              borderRadius: 12,
+              background: isOpen ? currentRoleBg : 'transparent',
+              border: isOpen ? `1px solid ${currentRoleColor}20` : 'none',
+              width: isOpen ? 'calc(100% - 16px)' : 'auto',
+              boxSizing: 'border-box',
+              minHeight: isOpen ? 56 : 'auto',
+              transition: 'all 0.2s ease',
+              marginLeft: isOpen ? 8 : 0,
+              marginRight: isOpen ? 8 : 0,
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: `linear-gradient(135deg, ${currentRoleColor} 0%, ${currentRoleColor}cc 100%)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                flexShrink: 0,
+                boxShadow: `0 2px 8px ${currentRoleColor}40`,
               }}
-            />
+            >
+              {userName.charAt(0).toUpperCase()}
+            </div>
+            {isOpen && (
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#1e293b',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {userName}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: currentRoleColor,
+                    lineHeight: 1.3,
+                    marginTop: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <span style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: currentRoleColor,
+                    flexShrink: 0,
+                  }} />
+                  {role}
+                </div>
+              </div>
+            )}
           </div>
-          
-          {/* Toggle button */}
+
+          {/* Toggle button - Arrow icon on the side */}
           <button
             onClick={onToggle}
             style={{
-              background: 'rgba(241, 245, 249, 0.8)',
+              position: 'absolute',
+              right: -12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'rgba(241, 245, 249, 0.9)',
               border: '1px solid rgba(226, 232, 240, 0.6)',
               cursor: 'pointer',
-              padding: 8,
+              padding: 6,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: 10,
+              borderRadius: 6,
               color: '#64748b',
               transition: 'all 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
               flexShrink: 0,
-              width: 34,
-              height: 34,
+              width: 24,
+              height: 24,
+              zIndex: 10,
             }}
             onMouseOver={(e) => {
-              e.currentTarget.style.background = 'rgba(226, 232, 240, 0.9)';
-              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.background = 'rgba(226, 232, 240, 0.95)';
               e.currentTarget.style.color = '#334155';
             }}
             onMouseOut={(e) => {
-              e.currentTarget.style.background = 'rgba(241, 245, 249, 0.8)';
-              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.background = 'rgba(241, 245, 249, 0.9)';
               e.currentTarget.style.color = '#64748b';
             }}
             title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -174,13 +241,13 @@ export default function Sidebar({
               strokeWidth={2}
               stroke="currentColor"
               style={{
-                width: 16,
-                height: 16,
+                width: 12,
+                height: 12,
                 transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
-                transform: isOpen ? 'rotate(0deg)' : 'rotate(180deg)',
+                transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
               }}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>
           </button>
         </div>
@@ -188,7 +255,7 @@ export default function Sidebar({
         {/* Navigation Label */}
         {isOpen && (
           <div style={{
-            padding: '16px 16px 8px',
+            padding: '8px 16px 8px',
             fontSize: 11,
             fontWeight: 600,
             color: '#94a3b8',
@@ -207,7 +274,7 @@ export default function Sidebar({
             overflowX: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            padding: isOpen ? '0 12px 16px' : '16px 8px',
+            padding: isOpen ? '0 12px' : '8px 8px 12px',
             gap: 4,
           }}
         >
@@ -286,95 +353,67 @@ export default function Sidebar({
           })}
         </nav>
 
-        {/* Sidebar Footer - User Info (Always at bottom) */}
+        {/* Sidebar Footer - Logout Button (Always at bottom) */}
         <div
           style={{
-            padding: isOpen ? '16px' : '16px 8px',
+            padding: isOpen ? '12px 16px' : '12px 8px',
             borderTop: 'none',
             background: 'transparent',
             flexShrink: 0,
             transition: 'all 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
           }}
         >
-          <div
+          <button
+            onClick={onLogout}
             style={{
+              width: isOpen ? 'calc(100% - 0px)' : 'calc(100% - 0px)',
+              background: '#ef4444',
+              border: '1px solid #ef4444',
+              borderRadius: 12,
+              padding: isOpen ? '12px 14px' : '12px 8px',
+              cursor: 'pointer',
+              fontSize: 13.5,
+              fontWeight: 500,
+              color: '#fff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: isOpen ? 'flex-start' : 'center',
-              gap: isOpen ? 12 : 0,
-              padding: isOpen ? '12px 14px' : '12px 8px',
-              borderRadius: 12,
-              background: currentRoleBg,
-              border: `1px solid ${currentRoleColor}20`,
-              width: '100%',
+              gap: isOpen ? 10 : 0,
+              fontFamily: 'inherit',
+              transition: 'all .2s',
+              minHeight: 44,
               boxSizing: 'border-box',
-              minHeight: 56,
-              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)',
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = '#dc2626';
+              e.currentTarget.style.borderColor = '#dc2626';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = '#ef4444';
+              e.currentTarget.style.borderColor = '#ef4444';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+              e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: `linear-gradient(135deg, ${currentRoleColor} 0%, ${currentRoleColor}cc 100%)`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 700,
-                flexShrink: 0,
-                boxShadow: `0 2px 8px ${currentRoleColor}40`,
-              }}
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              strokeWidth={1.5} 
+              stroke="currentColor" 
+              style={{ width: 16, height: 16, flexShrink: 0 }}
             >
-              {userName.charAt(0).toUpperCase()}
-            </div>
-            {isOpen && (
-              <div
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: '#1e293b',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {userName}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: currentRoleColor,
-                    lineHeight: 1.3,
-                    marginTop: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <span style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: currentRoleColor,
-                    flexShrink: 0,
-                  }} />
-                  {role}
-                </div>
-              </div>
-            )}
-          </div>
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" 
+              />
+            </svg>
+            {isOpen && 'Logout'}
+          </button>
         </div>
       </aside>
 
