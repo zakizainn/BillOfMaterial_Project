@@ -68,6 +68,11 @@ export async function POST(
     }
     await client.query('COMMIT');
 
+    // Refresh materialized view setelah update prod plan
+    pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_bom_gabungan').catch(err => {
+      console.error('[MV Refresh Error after prod_plan update]', err);
+    });
+
     return NextResponse.json({ message: 'Prod Plan berhasil disimpan', upserted });
   } catch (error) {
     await client.query('ROLLBACK');

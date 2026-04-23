@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
     await client.query('BEGIN');
     let bomInserted = 0;
-    for (const row of rows as Record<string,unknown>[]) {
+    for (const row of rows as Record<string, unknown>[]) {
       await client.query(`
         INSERT INTO bom_detail (periode, part_no, assy_code, sequence, qty_per_unit)
         VALUES ($1, $2, $3, $4, $5)
@@ -55,6 +55,13 @@ export async function POST(request: Request) {
       bomInserted++;
     }
     await client.query('COMMIT');
+
+    // ── Refresh materialized view setelah upload berhasil ──
+    // Fire-and-forget: tidak block response ke client
+    // CONCURRENTLY agar tidak lock tabel saat ada query lain berjalan
+    pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_bom_gabungan').catch(err => {
+      console.error('[MV Refresh Error after BOM upload]', err);
+    });
 
     return NextResponse.json({ message: 'Batch berhasil', periode, bom_rows: bomInserted });
   } catch (error) {
