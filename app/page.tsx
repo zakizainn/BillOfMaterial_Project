@@ -13,7 +13,7 @@ export default function Home() {
   const { data: session, status } = useSession();
   const [page, setPage] = useState<'assy' | 'part' | 'bom' | 'prodplan'>('assy');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   // ✅ DIHAPUS: useEffect redirect — sekarang middleware yang handle ini server-side
@@ -29,6 +29,28 @@ export default function Home() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Close sidebar when clicking outside of it (on main content area)
+  useEffect(() => {
+    if (!sidebarOpen || isMobile) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const sidebarElement = document.querySelector('[data-sidebar]');
+      const target = e.target as Node;
+      
+
+    };
+
+    // Add small delay to avoid closing immediately on toggle click
+    const timer = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside);
+    }, 50);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [sidebarOpen, isMobile]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -81,19 +103,23 @@ export default function Home() {
         @keyframes slideOut { from { transform: translateX(0); opacity: 1 } to { transform: translateX(-100%); opacity: 0 } }
       `}</style>
 
-      <Sidebar
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
+      <div data-sidebar>
+        <Sidebar
+          isOpen={sidebarOpen}
+          onToggle={() => setSidebarOpen(!sidebarOpen)}
         currentPage={page}
         onPageChange={(newPage) => {
           if (newPage === 'report') {
             window.location.href = '/report';
           } else {
             setPage(newPage);
+
           }
         }}
         isMobile={isMobile}
-      />
+        onLogout={() => signOut({ callbackUrl: '/login' })}
+        />
+      </div>
 
       {/* Main Content */}
       <div style={{ 
@@ -161,42 +187,19 @@ export default function Home() {
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              onClick={() => signOut({ callbackUrl: '/login' })}
+            {/* Logo at top-right (moved from sidebar) */}
+            <img
+              src="/yazaki-logo.jpeg"
+              alt="YAZAKI Logo"
               style={{
-                background: 'rgba(255, 255, 255, 0.8)', 
-                border: '1px solid rgba(226, 232, 240, 0.8)', 
-                borderRadius: 10,
-                padding: '8px 16px', 
-                fontSize: 13, 
-                fontWeight: 500, 
-                color: '#64748b',
-                cursor: 'pointer', 
-                fontFamily: 'inherit', 
-                display: 'flex',
-                alignItems: 'center', 
-                gap: 8, 
-                transition: 'all .2s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                height: 48,
+                width: 'auto',
+                objectFit: 'contain',
+                opacity: isMobile ? 0 : 1,
+                transition: 'opacity 0.3s ease',
+                display: isMobile ? 'none' : 'block',
               }}
-              onMouseOver={e => { 
-                e.currentTarget.style.borderColor = '#fecaca'; 
-                e.currentTarget.style.background = '#fef2f2'; 
-                e.currentTarget.style.color = '#dc2626'; 
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.15)';
-              }}
-              onMouseOut={e => { 
-                e.currentTarget.style.borderColor = 'rgba(226, 232, 240, 0.8)'; 
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)'; 
-                e.currentTarget.style.color = '#64748b'; 
-                e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
-              </svg>
-              {!isMobile && 'Logout'}
-            </button>
+            />
           </div>
         </header>
 
