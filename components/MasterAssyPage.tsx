@@ -109,7 +109,7 @@ function UploadModal({ onClose, onSuccess, showToast }: {
         <div style={{ marginBottom: 20 }}>
           <p style={{ fontWeight: 600, fontSize: 13.5, color: '#111827', marginBottom: 10, fontFamily: font }}>👁 Preview Data ({preview.length} baris)</p>
           <div style={{ maxHeight: 260, overflowY: 'auto', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-            <Table headers={[{label:'Assy Code'},{label:'No Urut'},{label:'Seq'},{label:'Carline'},{label:'Destinasi'},{label:'Komoditi'},{label:'Deskripsi'},{label:'Status'}]} rows={preview.map(r => [r.assy_code, r.assy_number, (r as any).sequence ?? '—', (r as any).carline || '—', (r as any).destinasi || '—', (r as any).komoditi || '—', r.description || '—', <Badge active={!!r.is_active} />])} />
+            <Table headers={[{label:'Assy Code'},{label:'Seq'},{label:'Komoditi'},{label:'Destinasi'},{label:'Carline'},{label:'Deskripsi'},{label:'Status'}]} rows={preview.map(r => [r.assy_code, (r as any).sequence ?? '—', (r as any).komoditi || '—', (r as any).destinasi || '—', (r as any).carline || '—', r.description || '—', <Badge active={!!r.is_active} />])} />
           </div>
         </div>
       )}
@@ -292,11 +292,10 @@ export default function MasterAssyPage({ showToast, role }: {
   const tableRows = paginated.map(r => [
     ...(showCheckbox ? [<input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: canDelete ? '#dc2626' : '#16a34a' }} />] : []),
     <span style={{ fontWeight: 700, color: '#2563eb', fontFamily: 'monospace', fontSize: 12.5 }}>{r.assy_code}</span>,
-    <span style={{ color: '#64748b', fontSize: 13 }}>{r.assy_number}</span>,
     r.sequence != null ? <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '2px 8px', fontSize: 11.5, fontWeight: 700 }}>{r.sequence}</span> : <span style={{ color: '#d1d5db' }}>—</span>,
-    r.carline   ? <span style={{ color: '#374151', fontSize: 13 }}>{r.carline}</span>   : <span style={{ color: '#d1d5db' }}>—</span>,
-    r.destinasi ? <span style={{ color: '#374151', fontSize: 13 }}>{r.destinasi}</span> : <span style={{ color: '#d1d5db' }}>—</span>,
     r.komoditi  ? <span style={{ color: '#374151', fontSize: 13 }}>{r.komoditi}</span>  : <span style={{ color: '#d1d5db' }}>—</span>,
+    r.destinasi ? <span style={{ color: '#374151', fontSize: 13 }}>{r.destinasi}</span> : <span style={{ color: '#d1d5db' }}>—</span>,
+    r.carline   ? <span style={{ color: '#374151', fontSize: 13 }}>{r.carline}</span>   : <span style={{ color: '#d1d5db' }}>—</span>,
     r.description ? <span style={{ color: '#4b5563', fontSize: 13 }}>{r.description}</span> : <span style={{ color: '#d1d5db' }}>—</span>,
     <Badge active={r.is_active} />,
     renderAksi(r),
@@ -384,7 +383,7 @@ export default function MasterAssyPage({ showToast, role }: {
         <>
           <Table headers={[
               ...(showCheckbox ? [{label: <input type="checkbox" checked={allChecked} onChange={toggleAll} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: canDelete ? '#dc2626' : '#16a34a' }} /> as unknown as string}] : []),
-              {label:'Assy Code'},{label:'No Urut'},{label:'Seq'},{label:'Carline'},{label:'Destinasi'},{label:'Komoditi'},{label:'Deskripsi'},{label:'Status'},{label:'Aksi'}
+              {label:'Assy Code'},{label:'Seq'},{label:'Komoditi'},{label:'Destinasi'},{label:'Carline'},{label:'Deskripsi'},{label:'Status'},{label:'Aksi'}
             ]} rows={tableRows} />
           <Pagination total={filtered.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} />
         </>
