@@ -333,7 +333,7 @@ export default function ProdPlanPage({ showToast, role }: {
                 </thead>
                 <tbody>
                   {filtered.map((r, i) => {
-                    const qty    = editMap[r.assy_code] ?? 0;
+                    const qty    = editMap[getKey(r.assy_code, r.sequence)] ?? 0;
                     const filled = qty > 0;
                     return (
                       <tr key={r.assy_code} style={{ borderBottom: '1px solid #f1f5f9' }}

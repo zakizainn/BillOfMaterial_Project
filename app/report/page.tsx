@@ -71,28 +71,29 @@ function PageBtn({ children, onClick, disabled, active }: { children: React.Reac
 // Render hanya kolom yang visible — krusial untuk 500 ASSY × 12 periode
 function VirtualReportTable({
   rows, cols, mode, periodes,
-  footerColSums, footerTotalUsage,
+  footerColSums, footerTotalUsage, isMobile,
 }: {
   rows:             ComputedRow[];
   cols:             ColDef[];
   mode:             'single' | 'gabungan';
   periodes:         string[];
+  isMobile:         boolean;
   footerColSums:    number[];
   footerTotalUsage: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Fixed columns: Part No, AS400, Supplier, Part Name, Unit = 5 cols
-  // lebar masing-masing:
-  const FW = [130, 110, 110, 160, 55];
+  // lebar masing-masing (responsive for mobile):
+  const FW = isMobile ? [100, 110, 110, 160, 55] : [130, 110, 110, 160, 55];
   const fixedTotalW = FW.reduce((a, b) => a + b, 0);
   const STICKY_RIGHT_TOTAL = 72;
   const STICKY_RIGHT_USAGE = 90;
   const COL_W   = mode === 'gabungan' ? 62 : 90;
-  const ROW_H   = 34;
-  const HEAD1_H = 32;
-  const HEAD2_H = mode === 'gabungan' ? 24 : 0;
-  const HEAD3_H = 28; // prod qty row
+  const ROW_H   = isMobile ? 28 : 34;
+  const HEAD1_H = isMobile ? 26 : 32;
+  const HEAD2_H = mode === 'gabungan' ? (isMobile ? 18 : 24) : 0;
+  const HEAD3_H = isMobile ? 24 : 28; // prod qty row
   const TOTAL_HEAD_H = HEAD1_H + HEAD2_H + HEAD3_H;
 
   // Virtual columns
@@ -115,23 +116,27 @@ function VirtualReportTable({
   const dynW = colVirt.getTotalSize();
 
   return (
-    <div ref={scrollRef} style={{ overflow: 'auto', maxHeight: 'calc(100vh - 340px)', position: 'relative', fontSize: 11.5, whiteSpace: 'nowrap' }}>
+    <div ref={scrollRef} style={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)', position: 'relative', fontSize: 11.5, whiteSpace: 'nowrap' }}>
 
       {/* ── STICKY HEADER ── */}
       <div style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', flexDirection: 'column', width: fixedTotalW + dynW + STICKY_RIGHT_TOTAL + STICKY_RIGHT_USAGE, minWidth: '100%' }}>
 
         {/* Row 1: Column labels */}
         <div style={{ display: 'flex', background: '#1e3a5f', height: HEAD1_H }}>
-          {/* Fixed headers */}
-          {(['PART NO','PART NO AS400','SUPPLIER','PART NAME','UNIT'] as const).map((label, i) => (
-            <div key={label} style={{
-              width: FW[i], flexShrink: 0, padding: '0 10px',
-              display: 'flex', alignItems: 'center',
-              color: '#cbd5e1', fontWeight: 600, fontSize: 10,
-              borderRight: i === 4 ? '2px solid #475569' : '1px solid #334155',
-              position: 'sticky', left: FW.slice(0,i).reduce((a,b)=>a+b,0), background: '#1e3a5f', zIndex: 21,
-            }}>{label}</div>
-          ))}
+          {/* Fixed headers - responsive for mobile/desktop */}
+          {(['PART NO','PART NO AS400','SUPPLIER','PART NAME','UNIT'] as const).map((label, i) => {
+            if (isMobile && i > 0) return null; // Only show PART NO on mobile
+            const leftPos = isMobile ? 0 : FW.slice(0,i).reduce((a,b)=>a+b,0);
+            return (
+              <div key={label} style={{
+                width: FW[i], flexShrink: 0, padding: isMobile ? '0 4px' : '0 10px',
+                display: 'flex', alignItems: 'center',
+                color: '#cbd5e1', fontWeight: 600, fontSize: isMobile ? 8 : 10,
+                borderRight: i === 4 ? '2px solid #475569' : '1px solid #334155',
+                position: 'sticky', left: leftPos, background: '#1e3a5f', zIndex: 21,
+              }}>{label}</div>
+            );
+          })}
           {/* Dynamic ASSY headers */}
           <div style={{ position: 'relative', width: dynW, flexShrink: 0, height: HEAD1_H }}>
             {colVirt.getVirtualItems().map(vcol => {
@@ -193,8 +198,8 @@ function VirtualReportTable({
         {/* Row 3: Prod Qty */}
         <div style={{ display: 'flex', background: '#0f172a', height: HEAD3_H }}>
           <div style={{ width: FW[0], flexShrink: 0, padding: '0 10px', display: 'flex', alignItems: 'center', color: '#f59e0b', fontWeight: 700, fontSize: 10.5, borderRight: '1px solid #1e293b', position: 'sticky', left: 0, background: '#0f172a', zIndex: 21 }}>PROD QTY →</div>
-          {FW.slice(1).map((w, i) => (
-            <div key={i} style={{ width: w, flexShrink: 0, borderRight: i === 3 ? '2px solid #475569' : '1px solid #1e293b', position: i === 0 ? 'sticky' : 'relative', left: i === 0 ? FW[0] : undefined, background: '#0f172a', zIndex: i === 0 ? 21 : undefined }} />
+          {!isMobile && FW.slice(1).map((w, i) => (
+            <div key={i} style={{ width: w, flexShrink: 0, borderRight: i === 3 ? '2px solid #475569' : '1px solid #1e293b', position: 'sticky', left: FW[0] + FW.slice(1, i+1).reduce((a,b)=>a+b,0), background: '#0f172a', zIndex: 21 }} />
           ))}
           <div style={{ position: 'relative', width: dynW, flexShrink: 0, height: HEAD3_H }}>
             {colVirt.getVirtualItems().map(vcol => {
@@ -234,14 +239,18 @@ function VirtualReportTable({
               onMouseOver={e => (e.currentTarget.style.background = '#eff6ff')}
               onMouseOut={e =>  (e.currentTarget.style.background = rowBg)}
             >
-              {/* Fixed cells */}
-              <div style={{ width: FW[0], flexShrink: 0, padding: '0 10px', fontFamily: 'monospace', fontSize: 11, color: '#1d4ed8', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', position: 'sticky', left: 0, background: fixedBg, zIndex: 2, borderRight: '1px solid #e2e8f0', height: ROW_H, display: 'flex', alignItems: 'center' }}>{part.part_no}</div>
-              <div style={{ width: FW[1], flexShrink: 0, padding: '0 10px', fontFamily: 'monospace', fontSize: 10.5, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', borderRight: '1px solid #f1f5f9', height: ROW_H, display: 'flex', alignItems: 'center' }}>{part.part_no_as400 || '—'}</div>
-              <div style={{ width: FW[2], flexShrink: 0, padding: '0 10px', fontSize: 11, color: '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', borderRight: '1px solid #f1f5f9', height: ROW_H, display: 'flex', alignItems: 'center' }}>{part.supplier_name || '—'}</div>
-              <div style={{ width: FW[3], flexShrink: 0, padding: '0 10px', fontSize: 11, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', borderRight: '1px solid #f1f5f9', height: ROW_H, display: 'flex', alignItems: 'center' }}>{part.part_name || '—'}</div>
-              <div style={{ width: FW[4], flexShrink: 0, padding: '0 6px', textAlign: 'center', borderRight: '2px solid #e2e8f0', height: ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ background: '#eff6ff', color: '#1d4ed8', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>{part.unit || '—'}</span>
-              </div>
+              {/* Fixed cells - responsive for mobile/desktop */}
+              <div style={{ width: FW[0], flexShrink: 0, padding: isMobile ? '0 4px' : '0 10px', fontFamily: 'monospace', fontSize: isMobile ? 9 : 11, color: '#1d4ed8', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', position: 'sticky', left: 0, background: fixedBg, zIndex: 2, borderRight: '1px solid #e2e8f0', height: ROW_H, display: 'flex', alignItems: 'center' }}>{part.part_no}</div>
+              {!isMobile && (
+                <>
+                  <div style={{ width: FW[1], flexShrink: 0, padding: '0 10px', fontFamily: 'monospace', fontSize: 10.5, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', position: 'sticky', left: FW[0], background: fixedBg, zIndex: 2, borderRight: '1px solid #f1f5f9', height: ROW_H, display: 'flex', alignItems: 'center' }}>{part.part_no_as400 || '—'}</div>
+                  <div style={{ width: FW[2], flexShrink: 0, padding: '0 10px', fontSize: 11, color: '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', position: 'sticky', left: FW[0] + FW[1], background: fixedBg, zIndex: 2, borderRight: '1px solid #f1f5f9', height: ROW_H, display: 'flex', alignItems: 'center' }}>{part.supplier_name || '—'}</div>
+                  <div style={{ width: FW[3], flexShrink: 0, padding: '0 10px', fontSize: 11, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', position: 'sticky', left: FW[0] + FW[1] + FW[2], background: fixedBg, zIndex: 2, borderRight: '1px solid #f1f5f9', height: ROW_H, display: 'flex', alignItems: 'center' }}>{part.part_name || '—'}</div>
+                  <div style={{ width: FW[4], flexShrink: 0, padding: '0 6px', textAlign: 'center', position: 'sticky', left: FW[0] + FW[1] + FW[2] + FW[3], background: fixedBg, zIndex: 2, borderRight: '2px solid #e2e8f0', height: ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ background: '#eff6ff', color: '#1d4ed8', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>{part.unit || '—'}</span>
+                  </div>
+                </>
+              )}
 
               {/* Virtual dynamic cells */}
               <div style={{ position: 'relative', width: dynW, flexShrink: 0, height: ROW_H }}>
@@ -262,10 +271,10 @@ function VirtualReportTable({
               </div>
 
               {/* Sticky right: Total, Total Usage */}
-              <div style={{ width: STICKY_RIGHT_TOTAL, flexShrink: 0, padding: '0 8px', textAlign: 'right', fontWeight: 700, color: '#92400e', borderLeft: '2px solid #fde68a', background: isEven ? '#fffbeb' : '#fef9c3', fontSize: 11, position: 'sticky', right: STICKY_RIGHT_USAGE, height: ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+              <div style={{ width: STICKY_RIGHT_TOTAL, flexShrink: 0, padding: isMobile ? '0 4px' : '0 8px', textAlign: 'right', fontWeight: 700, color: '#92400e', borderLeft: '2px solid #fde68a', background: isEven ? '#fffbeb' : '#fef9c3', fontSize: isMobile ? 8 : 11, position: 'sticky', right: STICKY_RIGHT_USAGE, height: ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 {totalQty > 0 ? totalQty.toLocaleString() : '—'}
               </div>
-              <div style={{ width: STICKY_RIGHT_USAGE, flexShrink: 0, padding: '0 8px', textAlign: 'right', fontWeight: 700, color: totalUsage > 0 ? '#15803d' : '#9ca3af', borderLeft: '2px solid #bbf7d0', background: isEven ? '#f0fdf4' : '#dcfce7', fontSize: 11, position: 'sticky', right: 0, height: ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+              <div style={{ width: STICKY_RIGHT_USAGE, flexShrink: 0, padding: isMobile ? '0 4px' : '0 8px', textAlign: 'right', fontWeight: 700, color: totalUsage > 0 ? '#15803d' : '#9ca3af', borderLeft: '2px solid #bbf7d0', background: isEven ? '#f0fdf4' : '#dcfce7', fontSize: isMobile ? 8 : 11, position: 'sticky', right: 0, height: ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 {totalUsage > 0 ? totalUsage.toLocaleString() : '—'}
               </div>
             </div>
@@ -280,8 +289,8 @@ function VirtualReportTable({
         width: fixedTotalW + dynW + STICKY_RIGHT_TOTAL + STICKY_RIGHT_USAGE, minWidth: '100%',
       }}>
         <div style={{ width: FW[0], flexShrink: 0, padding: '0 10px', display: 'flex', alignItems: 'center', color: '#fbbf24', fontWeight: 700, fontSize: 10.5, borderRight: '1px solid #334155', position: 'sticky', left: 0, background: '#1e3a5f', zIndex: 21 }}>∑ TOTAL PER ASSY</div>
-        {FW.slice(1).map((w, i) => (
-          <div key={i} style={{ width: w, flexShrink: 0, borderRight: i === 3 ? '2px solid #475569' : '1px solid #334155', background: '#1e3a5f' }} />
+        {!isMobile && FW.slice(1).map((w, i) => (
+          <div key={i} style={{ width: w, flexShrink: 0, borderRight: i === 3 ? '2px solid #475569' : '1px solid #334155', position: 'sticky', left: FW[0] + FW.slice(1, i+1).reduce((a,b)=>a+b,0), background: '#1e3a5f', zIndex: 21 }} />
         ))}
         <div style={{ position: 'relative', width: dynW, flexShrink: 0, height: ROW_H }}>
           {colVirt.getVirtualItems().map(vcol => (
@@ -339,6 +348,19 @@ function ReportContent() {
   const [selectedAssy,   setSelectedAssy]   = useState<Set<string>>(new Set());
   const [assySearch,     setAssySearch]     = useState('');
   const [showAssyPicker, setShowAssyPicker] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const gabunganKey = `${dari}_${sampai}`;
 
@@ -500,10 +522,58 @@ function ReportContent() {
     return `/api/report?periode=${encodeURIComponent(periode)}${selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : ''}&search=${encodeURIComponent(s)}&download=true`;
   };
 
-  const handleExport = () => {
-    const anchor = document.createElement('a');
-    anchor.href  = buildDownloadUrl(search);
-    anchor.click();
+  const handleExport = async () => {
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    
+    // Animate progress bar quickly
+    const progressInterval = setInterval(() => {
+      setDownloadProgress(prev => {
+        if (prev >= 95) {
+          clearInterval(progressInterval);
+          return 95;
+        }
+        return prev + Math.random() * 40;
+      });
+    }, 100);
+    
+    try {
+      // Fetch file from server
+      const url = buildDownloadUrl(search);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        clearInterval(progressInterval);
+        setIsDownloading(false);
+        throw new Error('Download failed');
+      }
+      
+      // Complete progress bar to 100 when server responds
+      clearInterval(progressInterval);
+      setDownloadProgress(100);
+      
+      // Get blob and trigger download immediately
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = `report_${mode === 'gabungan' ? dari + '_' + sampai : periode}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(downloadUrl);
+      
+      // Hide progress bar after 500ms
+      setTimeout(() => {
+        setIsDownloading(false);
+        setDownloadProgress(0);
+      }, 500);
+    } catch (error) {
+      console.error('Export error:', error);
+      clearInterval(progressInterval);
+      setIsDownloading(false);
+      setDownloadProgress(0);
+    }
   };
 
   return (
@@ -513,6 +583,7 @@ function ReportContent() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes spin    { to { transform: rotate(360deg) } }
         @keyframes fadeUp  { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+        @keyframes slideDown { from { opacity:0; transform:translateY(-12px) } to { opacity:1; transform:translateY(0) } }
       `}</style>
 
       {/* Navbar */}
@@ -688,6 +759,29 @@ function ReportContent() {
               )}
             </div>
 
+            {/* Download Progress Bar */}
+            {isDownloading && (
+              <div style={{ background: '#fff', borderBottom: '1px solid #e8eaed', padding: '12px 20px', animation: 'slideDown 0.3s ease' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 14 }}>⬇️</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', marginBottom: 4 }}>
+                      Mengunduh laporan... {Math.round(downloadProgress)}%
+                    </div>
+                    <div style={{ width: '100%', height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${downloadProgress}%`,
+                        height: '100%',
+                        background: 'linear-gradient(90deg, #10b981, #059669)',
+                        transition: 'width 0.2s ease',
+                        borderRadius: 3
+                      }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Virtual Table */}
             <VirtualReportTable
               rows={computedRows}
@@ -696,6 +790,7 @@ function ReportContent() {
               periodes={periodes}
               footerColSums={footerColSums}
               footerTotalUsage={footerTotalUsage}
+              isMobile={isMobile}
             />
 
             {/* Pagination */}
