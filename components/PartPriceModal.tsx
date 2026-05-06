@@ -52,7 +52,7 @@ export default function PartPriceModal({ periode, role, onClose }: {
   const [search,    setSearch]    = useState('');
   const [filter,    setFilter]    = useState<'all'|'filled'|'empty'>('all');
   const [priceMap,  setPriceMap]  = useState<Record<string, string>>({});
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const fileRef     = useRef<HTMLInputElement>(null);
 
   const totalPages = Math.ceil(total / LIMIT) || 1;

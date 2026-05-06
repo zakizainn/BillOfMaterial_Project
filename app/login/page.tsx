@@ -201,7 +201,7 @@ export default function LoginPage() {
           boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.8)',
         }}>
           <div style={{ marginBottom: 32 }}>
-            <h2 style={{ fontSize: 28, fontWeight: 800, color: '#1e293b', marginBottom: 8, letterSpacing: -0.5 }}>Masuk</h2>
+            <h2 style={{ fontSize: 28, fontWeight: 800, color: '#1e293b', marginBottom: 8, letterSpacing: -0.5 }}>Login</h2>
             <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, fontWeight: 500 }}>
               Gunakan akun departemen Anda untuk mengakses sistem
             </p>
@@ -379,9 +379,9 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <div style={{ width: 18, height: 18, border: '2px solid rgba(255,255,255,.3)', borderTop: '2px solid #fff', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
-                  <span>Masuk...</span>
+                  <span>Login...</span>
                 </>
-              ) : 'Masuk'}
+              ) : 'Login'}
             </button>
           </div>
 

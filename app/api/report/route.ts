@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const limit      = parseInt(url.searchParams.get('limit') || '50');
     const search     = url.searchParams.get('search') || '';
     const offset     = (page - 1) * limit;
+    const isFooter   = url.searchParams.get('footer') === 'true';
 
     const isGabungan = !periode && !!dari && !!sampai;
 
@@ -54,67 +55,123 @@ export async function GET(request: Request) {
       return { where: clauses.join(' AND '), extraParams: params, nextIdx: idx };
     }
 
+    // ── FOOTER MODE — agregasi ringan, tanpa kirim semua rows ──────
+    if (isFooter) {
+      const p1 = isGabungan ? dari! : periode!;
+      const p2 = isGabungan ? sampai! : periode!;
+
+      const params: unknown[] = [p1, p2];
+      let idx = 3;
+      const extraClauses: string[] = [];
+
+      if (assyParams.length > 0) {
+        extraClauses.push(`assy_code = ANY($${idx}::text[])`);
+        params.push(assyParams); idx++;
+      }
+      if (hasSearch) {
+        extraClauses.push(`(part_no ILIKE $${idx} OR part_name ILIKE $${idx})`);
+        params.push(`%${search.trim()}%`); idx++;
+      }
+
+      const whereExtra = extraClauses.length ? ` AND ${extraClauses.join(' AND ')}` : '';
+      const selectPeriode = isGabungan ? ', periode' : '';
+      const groupBy = isGabungan ? 'assy_code, periode' : 'assy_code';
+
+      // Satu query agregasi — jauh lebih ringan dari fetch semua rows
+      const result = await pool.query(
+        `SELECT assy_code${selectPeriode}, SUM(qty_per_unit)::numeric AS col_sum
+        FROM mv_bom_gabungan
+        WHERE periode >= $1 AND periode <= $2${whereExtra}
+        GROUP BY ${groupBy}
+        ORDER BY assy_code`,
+        params
+      );
+
+      // Prod qty untuk hitung total usage di footer
+      const prodResult = await pool.query(
+        `SELECT assy_code, periode, COALESCE(prod_qty, 0) AS prod_qty
+        FROM prod_plan WHERE periode >= $1 AND periode <= $2`,
+        [p1, p2]
+      );
+
+      return NextResponse.json({
+        col_sums: result.rows,
+        prod_map: prodResult.rows,
+      });
+    }
+
+
     // ─── DOWNLOAD MODE ────────────────────────────────────────────
     // Format: XLSX dengan merged cells (menggunakan struktur dari file teman)
     if (download) {
-      const periodeList = isGabungan
-        ? (await pool.query(
-            `SELECT DISTINCT periode FROM mv_bom_gabungan
-             WHERE periode >= $1 AND periode <= $2 ORDER BY periode`,
-            [dari, sampai]
-          )).rows.map((r: { periode: string }) => r.periode)
-        : [periode!];
-
-      // 1. ASSY codes
-      const assyQuery = hasAssyFilter
-        ? `SELECT DISTINCT assy_code FROM mv_bom_gabungan
-           WHERE periode >= $1 AND periode <= $2 AND assy_code = ANY($3::text[])
-           ORDER BY assy_code`
-        : `SELECT DISTINCT assy_code FROM mv_bom_gabungan
-           WHERE periode >= $1 AND periode <= $2 ORDER BY assy_code`;
       const [p1, p2] = isGabungan ? [dari!, sampai!] : [periode!, periode!];
-      const assyRes   = await pool.query(
-        assyQuery,
-        hasAssyFilter ? [p1, p2, assyParams] : [p1, p2]
-      );
-      const assyCodes: string[] = assyRes.rows.map((r: { assy_code: string }) => r.assy_code);
 
-      // 2. Prod qty: { assy_code: { periode: qty } }
-      const prodRes = await pool.query(
-        `SELECT assy_code, periode, COALESCE(prod_qty, 0) AS prod_qty
-         FROM prod_plan WHERE periode >= $1 AND periode <= $2`,
-        [p1, p2]
-      );
+      // Run all queries in parallel for faster processing
+      const [periodeRes, assyRes, prodRes] = await Promise.all([
+        isGabungan
+          ? pool.query(
+              `SELECT DISTINCT periode FROM mv_bom_gabungan
+               WHERE periode >= $1 AND periode <= $2 ORDER BY periode`,
+              [p1, p2]
+            )
+          : Promise.resolve({ rows: [{ periode: periode! }] }),
+        // ASSY codes
+        pool.query(
+          hasAssyFilter
+            ? `SELECT DISTINCT assy_code FROM mv_bom_gabungan
+               WHERE periode >= $1 AND periode <= $2 AND assy_code = ANY($3::text[])
+               ORDER BY assy_code`
+            : `SELECT DISTINCT assy_code FROM mv_bom_gabungan
+               WHERE periode >= $1 AND periode <= $2 ORDER BY assy_code`,
+          hasAssyFilter ? [p1, p2, assyParams] : [p1, p2]
+        ),
+        // Prod qty
+        pool.query(
+          `SELECT assy_code, periode, COALESCE(prod_qty, 0) AS prod_qty
+           FROM prod_plan WHERE periode >= $1 AND periode <= $2`,
+          [p1, p2]
+        ),
+      ]);
+
+      const periodeList = periodeRes.rows.map((r: { periode: string }) => r.periode);
+      const assyCodes: string[] = assyRes.rows.map((r: { assy_code: string }) => r.assy_code);
+      
+      // Build prod map from results
       const prodMap: Record<string, Record<string, number>> = {};
       for (const r of prodRes.rows) {
         if (!prodMap[r.assy_code]) prodMap[r.assy_code] = {};
         prodMap[r.assy_code][r.periode] = Number(r.prod_qty);
       }
 
-      // 3. Semua part (tanpa pagination untuk download)
+      // Get parts and qty data in parallel
       const { where: pw, extraParams: pe } = buildWhere(
         `periode >= $1 AND periode <= $2`, 3
       );
-      const partsRes = await pool.query(
-        `SELECT DISTINCT part_no, part_no_as400, part_name, unit, supplier_name
-         FROM mv_bom_gabungan WHERE ${pw} ORDER BY part_no`,
-        [p1, p2, ...pe]
-      );
+      
+      const [partsRes, qtyRes] = await Promise.all([
+        pool.query(
+          `SELECT DISTINCT m.part_no, m.part_no_as400, m.part_name, m.unit, m.supplier_name,
+                  (SELECT pp.price FROM part_price pp 
+                   WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2 
+                   ORDER BY pp.periode DESC LIMIT 1) AS price
+           FROM mv_bom_gabungan m
+           WHERE ${pw.replace(/part_no/g, 'm.part_no').replace(/part_name/g, 'm.part_name').replace(/periode/g, 'm.periode').replace(/assy_code/g, 'm.assy_code')} ORDER BY m.part_no`,
+          [p1, p2, ...pe]
+        ),
+        pool.query(
+          hasAssyFilter
+            ? `SELECT part_no, assy_code, periode, qty_per_unit
+               FROM mv_bom_gabungan
+               WHERE periode >= $1 AND periode <= $2
+                 AND assy_code = ANY($3::text[])`
+            : `SELECT part_no, assy_code, periode, qty_per_unit
+               FROM mv_bom_gabungan
+               WHERE periode >= $1 AND periode <= $2`,
+          hasAssyFilter ? [p1, p2, assyParams] : [p1, p2]
+        ),
+      ]);
+      
       const partNos: string[] = partsRes.rows.map((r: { part_no: string }) => r.part_no);
-
-      // 4. Qty data: long format semua part sekaligus
-      const qtyRes = await pool.query(
-        hasAssyFilter
-          ? `SELECT part_no, assy_code, periode, qty_per_unit
-             FROM mv_bom_gabungan
-             WHERE periode >= $1 AND periode <= $2
-               AND part_no = ANY($3) AND assy_code = ANY($4::text[])`
-          : `SELECT part_no, assy_code, periode, qty_per_unit
-             FROM mv_bom_gabungan
-             WHERE periode >= $1 AND periode <= $2
-               AND part_no = ANY($3)`,
-        hasAssyFilter ? [p1, p2, partNos, assyParams] : [p1, p2, partNos]
-      );
 
       // 5. Build lookup map O(n)
       const lookup = new Map<string, number>();
@@ -130,13 +187,14 @@ export async function GET(request: Request) {
         const baseColCount  = baseHeaders.length;
         const periodesPerAssy = periodeList.length;
 
-        // Row 1: ASSY names (di-repeat sebanyak jumlah periode), lalu Total & Total Usage
+        // Row 1: ASSY names (di-repeat sebanyak jumlah periode), lalu Price, Total & Total Usage
         const row1: string[] = [...baseHeaders];
         for (const assy of assyCodes) {
           for (let i = 0; i < periodesPerAssy; i++) {
             row1.push(assy);
           }
         }
+        row1.push('Price');
         row1.push('Total');
         row1.push('Total Usage');
 
@@ -149,8 +207,9 @@ export async function GET(request: Request) {
             row2.push(`${month} ${y}`);
           }
         }
-        row2.push('');
-        row2.push('');
+        row2.push(''); // Price
+        row2.push(''); // Total
+        row2.push(''); // Total Usage
 
         // Row 3: PROD QTY row
         const row3: (string | number)[] = ['PROD QTY →', '', '', '', ''];
@@ -159,8 +218,9 @@ export async function GET(request: Request) {
             row3.push(prodMap[assy]?.[per] ?? 0);
           }
         }
-        row3.push('');
-        row3.push('');
+        row3.push(''); // Price
+        row3.push(''); // Total
+        row3.push(''); // Total Usage
 
         // Rows 4+: Data part
         const data: (string | number)[][] = [row1, row2, row3];
@@ -183,6 +243,7 @@ export async function GET(request: Request) {
               totalUsage += qty * (prodMap[assy]?.[per] ?? 0);
             }
           }
+          row.push(part.price != null ? Number(part.price) : '');
           row.push(totalBom);
           row.push(Math.ceil(totalUsage));
           data.push(row);
@@ -210,6 +271,7 @@ export async function GET(request: Request) {
           { wch: 30 }, // Part Name
           { wch: 10 }, // Unit
           ...assyCodes.flatMap(() => periodeList.map(() => ({ wch: 12 }))),
+          { wch: 12 }, // Price
           { wch: 12 }, // Total
           { wch: 12 }, // Total Usage
         ];
@@ -232,8 +294,8 @@ export async function GET(request: Request) {
         flatProdMap[assy] = prodMap[assy]?.[periode!] ?? 0;
       }
 
-      const headers     = ['Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit', ...assyCodes, 'Total BOM', 'Total Usage'];
-      const prodQtyRow  = ['PROD QTY →', '', '', '', '', ...assyCodes.map(a => flatProdMap[a] ?? 0), '', ''];
+      const headers     = ['Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit', ...assyCodes, 'Price', 'Total BOM', 'Total Usage'];
+      const prodQtyRow  = ['PROD QTY →', '', '', '', '', ...assyCodes.map(a => flatProdMap[a] ?? 0), '', '', ''];
       const data: (string | number)[][] = [headers, prodQtyRow];
 
       for (const part of partsRes.rows) {
@@ -247,6 +309,7 @@ export async function GET(request: Request) {
         ];
         const totalBom   = assyCodes.reduce((s, a) => s + (lookup.get(`${part.part_no}|${a}|${periode!}`) ?? 0), 0);
         const totalUsage = assyCodes.reduce((s, a) => s + ((lookup.get(`${part.part_no}|${a}|${periode!}`) ?? 0) * (flatProdMap[a] ?? 0)), 0);
+        row.push(part.price != null ? Number(part.price) : '');
         row.push(totalBom);
         row.push(Math.ceil(totalUsage));
         data.push(row);
@@ -260,6 +323,7 @@ export async function GET(request: Request) {
         { wch: 30 }, // Part Name
         { wch: 10 }, // Unit
         ...assyCodes.map(() => ({ wch: 12 })),
+        { wch: 12 }, // Price
         { wch: 12 }, // Total BOM
         { wch: 12 }, // Total Usage
       ];
@@ -318,9 +382,13 @@ export async function GET(request: Request) {
         'periode >= $1 AND periode <= $2', 3
       );
       const partsResult = await pool.query(
-        `SELECT DISTINCT part_no, part_no_as400, part_name, unit, supplier_name
-         FROM mv_bom_gabungan WHERE ${partsWhere}
-         ORDER BY part_no LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
+        `SELECT DISTINCT m.part_no, m.part_no_as400, m.part_name, m.unit, m.supplier_name,
+                (SELECT pp.price FROM part_price pp 
+                 WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2 
+                 ORDER BY pp.periode DESC LIMIT 1) AS price
+         FROM mv_bom_gabungan m
+         WHERE ${partsWhere.replace(/part_no/g, 'm.part_no').replace(/part_name/g, 'm.part_name').replace(/periode/g, 'm.periode').replace(/assy_code/g, 'm.assy_code')}
+         ORDER BY m.part_no LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
         [dari, sampai, ...partsExtra, limit, offset]
       );
       const partNos: string[] = partsResult.rows.map((r: { part_no: string }) => r.part_no);
@@ -399,9 +467,11 @@ export async function GET(request: Request) {
       hasAssyFilter ? 3 : 2
     );
     const partsResult = await pool.query(
-      `SELECT DISTINCT part_no, part_no_as400, part_name, unit, supplier_name
-       FROM mv_bom_gabungan WHERE ${pw}
-       ORDER BY part_no LIMIT $${pni} OFFSET $${pni + 1}`,
+      `SELECT DISTINCT m.part_no, m.part_no_as400, m.part_name, m.unit, m.supplier_name,
+              (SELECT pp.price FROM part_price pp WHERE pp.part_no = m.part_no AND pp.periode = $1 LIMIT 1) AS price
+       FROM mv_bom_gabungan m
+       WHERE ${pw.replace(/part_no/g, 'm.part_no').replace(/part_name/g, 'm.part_name').replace(/periode/g, 'm.periode').replace(/assy_code/g, 'm.assy_code')}
+       ORDER BY m.part_no LIMIT $${pni} OFFSET $${pni + 1}`,
       [...countBase, ...pe, limit, offset]
     );
     const partNos: string[] = partsResult.rows.map((r: { part_no: string }) => r.part_no);
