@@ -5,13 +5,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const body = await request.json();
-    const { assy_number, sequence, carline, destinasi, komoditi, description, is_active } = body;
+    const { sequence, carline, destinasi, komoditi, description, is_active } = body;
     const result = await pool.query(
       `UPDATE master_assy 
-       SET assy_number=$1, sequence=$2, carline=$3, destinasi=$4, komoditi=$5,
-           description=$6, is_active=$7, updated_at=NOW()
-       WHERE id=$8 RETURNING *`,
-      [assy_number, sequence ?? null, carline ?? null, destinasi ?? null, komoditi ?? null,
+       SET sequence=$1, carline=$2, destinasi=$3, komoditi=$4,
+           description=$5, is_active=$6, updated_at=NOW()
+       WHERE id=$7 RETURNING *`,
+      [sequence ?? null, carline ?? null, destinasi ?? null, komoditi ?? null,
        description, is_active, id]
     );
     return NextResponse.json(result.rows[0]);

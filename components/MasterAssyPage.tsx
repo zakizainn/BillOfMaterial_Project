@@ -10,11 +10,11 @@ const font = "'DM Sans', system-ui, sans-serif";
 function downloadTemplate() {
   const wb = XLSX.utils.book_new();
   const data = [
-    ['assy_code','assy_number','sequence','carline','destinasi','komoditi','description','is_active'],
-    ['82219-K0050 B 1101', 1, 1, 'CY-S', 'YC', 'WH', 'Contoh deskripsi', 'true']
+    ['assy_code','sequence','carline','destinasi','komoditi','description','is_active'],
+    ['82219-K0050 B 1101', 1, 'CY-S', 'YC', 'WH', 'Contoh deskripsi', 'true']
   ];
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [30,12,12,15,15,15,30,12].map(w => ({ wch: w }));
+  ws['!cols'] = [30,12,15,15,15,30,12].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, 'Master ASSY');
   XLSX.writeFile(wb, 'template_master_assy.xlsx');
 }
@@ -39,15 +39,13 @@ function UploadModal({ onClose, onSuccess, showToast }: {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, unknown>[];
       if (!rows.length) { setErrors(['File kosong.']); return; }
-      const missing = ['assy_code','assy_number','is_active'].filter(c => !Object.keys(rows[0]).includes(c));
+      const missing = ['assy_code','is_active'].filter(c => !Object.keys(rows[0]).includes(c));
       if (missing.length) { setErrors([`Kolom kurang: ${missing.join(', ')}`]); return; }
       const rowErrors: string[] = [];
       const cleaned = rows.map((row, i) => {
         if (!row.assy_code) rowErrors.push(`Baris ${i+2}: assy_code kosong`);
-        if (!row.assy_number || isNaN(Number(row.assy_number))) rowErrors.push(`Baris ${i+2}: assy_number harus angka`);
         return {
           assy_code:   String(row.assy_code).trim(),
-          assy_number: Number(row.assy_number),
           sequence:    row.sequence !== '' && row.sequence != null ? Number(row.sequence) : null,
           carline:     String(row.carline   || '').trim() || null,
           destinasi:   String(row.destinasi || '').trim() || null,
@@ -128,7 +126,6 @@ function AssyForm({ initial, onSave, onClose, existingEntries }: {
   const editing = !!initial;
   const [form, setForm] = useState({
     assy_code:   initial?.assy_code   ?? '',
-    assy_number: initial?.assy_number?.toString() ?? '',
     sequence:    initial?.sequence?.toString()    ?? '',
     carline:     initial?.carline    ?? '',
     destinasi:   initial?.destinasi  ?? '',
@@ -143,14 +140,12 @@ function AssyForm({ initial, onSave, onClose, existingEntries }: {
     const e: Record<string,string> = {};
     if (!form.assy_code.trim()) e.assy_code = 'Assy code wajib diisi';
     else if (!editing) {
-      // Cek duplikat berdasarkan assy_code + sequence
       const isDuplicate = existingEntries.some(
         entry => entry.assy_code === form.assy_code.trim() &&
         String(entry.sequence ?? '') === String(form.sequence ?? '')
       );
       if (isDuplicate) e.assy_code = 'Kombinasi Assy Code dan Sequence sudah ada';
     }
-    if (!form.assy_number || isNaN(Number(form.assy_number))) e.assy_number = 'Nomor urut wajib diisi (angka)';
     return e;
   };
 
@@ -160,7 +155,6 @@ function AssyForm({ initial, onSave, onClose, existingEntries }: {
     onSave({
       ...initial,
       assy_code:   form.assy_code.trim(),
-      assy_number: Number(form.assy_number),
       sequence:    form.sequence !== '' ? Number(form.sequence) : null,
       carline:     form.carline.trim()   || null,
       destinasi:   form.destinasi.trim() || null,
@@ -174,17 +168,14 @@ function AssyForm({ initial, onSave, onClose, existingEntries }: {
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
         <Field label="Assy Code" required error={errors.assy_code}><Input value={form.assy_code} onChange={e => set('assy_code', e.target.value)} placeholder="e.g. 82219-K0050 B 1101" disabled={editing} /></Field>
-        <Field label="Nomor Urut" required error={errors.assy_number}><Input type="number" value={form.assy_number} onChange={e => set('assy_number', e.target.value)} placeholder="1" /></Field>
+        <Field label="Sequence"><Input type="number" value={form.sequence} onChange={e => set('sequence', e.target.value)} placeholder="1" /></Field>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 16px' }}>
         <Field label="Carline"><Input value={form.carline} onChange={e => set('carline', e.target.value)} placeholder="e.g. CY-S" /></Field>
         <Field label="Destinasi"><Input value={form.destinasi} onChange={e => set('destinasi', e.target.value)} placeholder="e.g. YC" /></Field>
         <Field label="Komoditi"><Input value={form.komoditi} onChange={e => set('komoditi', e.target.value)} placeholder="e.g. WH" /></Field>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0 16px' }}>
-        <Field label="Sequence"><Input type="number" value={form.sequence} onChange={e => set('sequence', e.target.value)} placeholder="1" /></Field>
-        <Field label="Description"><Input value={form.description ?? ''} onChange={e => set('description', e.target.value)} placeholder="Deskripsi (opsional)" /></Field>
-      </div>
+      <Field label="Description"><Input value={form.description ?? ''} onChange={e => set('description', e.target.value)} placeholder="Deskripsi (opsional)" /></Field>
       <Field label="Status"><Select value={form.is_active ? 'active' : 'inactive'} onChange={e => set('is_active', e.target.value === 'active')} options={['active','inactive']} /></Field>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
         <BtnGhost onClick={onClose} color="gray">Batal</BtnGhost>

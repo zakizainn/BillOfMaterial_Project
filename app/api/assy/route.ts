@@ -4,7 +4,7 @@ import pool from '@/lib/db';
 export async function GET() {
   try {
     const result = await pool.query(
-      'SELECT * FROM master_assy ORDER BY assy_number ASC'
+      'SELECT * FROM master_assy ORDER BY id ASC'
     );
     return NextResponse.json(result.rows);
   } catch (error) {
@@ -15,18 +15,18 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { assy_code, assy_number, sequence, carline, destinasi, komoditi, description, is_active } = body;
+    const { assy_code, sequence, carline, destinasi, komoditi, description, is_active } = body;
 
-    if (!assy_code || !assy_number) {
-      return NextResponse.json({ error: 'assy_code dan assy_number wajib diisi' }, { status: 400 });
+    if (!assy_code) {
+      return NextResponse.json({ error: 'assy_code wajib diisi' }, { status: 400 });
     }
 
     const result = await pool.query(
-      `INSERT INTO master_assy (assy_code, assy_number, sequence, carline, destinasi, komoditi, description, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO master_assy (assy_code, sequence, carline, destinasi, komoditi, description, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (assy_code, sequence) DO NOTHING
        RETURNING *`,
-      [assy_code, assy_number, sequence ?? null, carline ?? null, destinasi ?? null,
+      [assy_code, sequence ?? null, carline ?? null, destinasi ?? null,
        komoditi ?? null, description ?? null, is_active ?? true]
     );
 
