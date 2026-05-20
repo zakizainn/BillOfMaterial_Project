@@ -616,7 +616,7 @@ function ReportContent() {
   const gabunganKey = `${dari}_${sampai}`;
 
   useEffect(() => {
-    fetch('/api/bom').then(r => r.json()).then((data: { periode: string }[]) => {
+    fetch('/bom-management/api/bom').then(r => r.json()).then((data: { periode: string }[]) => {
       const ps = data.map(d => d.periode).sort().reverse();
       setAvailPer(ps);
       if (ps.length > 0) { setPeriode(ps[0]); setDari(ps[ps.length-1]); setSampai(ps[0]); }
@@ -625,7 +625,7 @@ function ReportContent() {
 
   const loadAssyCodes = useCallback(async () => {
     if (!dari || !sampai) return;
-    const res  = await fetch(`/api/bom/gabungan?dari=${dari}&sampai=${sampai}&mode=pivot&page=1&limit=1`);
+    const res  = await fetch(`/bom-management/api/bom/gabungan?dari=${dari}&sampai=${sampai}&mode=pivot&page=1&limit=1`);
     const data = await res.json();
     setAllAssyCodes(data.assy_codes ?? []);
   }, [dari, sampai]);
@@ -643,8 +643,8 @@ function ReportContent() {
 
   const buildUrl = useCallback((p: number, s: string) => {
     const base = mode === 'single'
-      ? `/api/report?periode=${encodeURIComponent(periode)}`
-      : `/api/report?dari=${dari}&sampai=${sampai}${selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : ''}`;
+      ? `/bom-management/api/report?periode=${encodeURIComponent(periode)}`
+      : `/bom-management/api/report?dari=${dari}&sampai=${sampai}${selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : ''}`;
     return `${base}&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}`;
   }, [mode, periode, dari, sampai, selectedAssy]);
 
@@ -704,8 +704,8 @@ function ReportContent() {
 
       try {
         const base = mode === 'single'
-          ? `/api/report?periode=${encodeURIComponent(periode)}&footer=true`
-          : `/api/report?dari=${dari}&sampai=${sampai}${selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : ''}&footer=true`;
+          ? `/bom-management/api/report?periode=${encodeURIComponent(periode)}&footer=true`
+          : `/bom-management/api/report?dari=${dari}&sampai=${sampai}${selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : ''}&footer=true`;
         const url = `${base}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
 
         const res = await fetch(url, { signal: ctrl.signal });
@@ -1010,7 +1010,7 @@ function ReportContent() {
         {/* Right: YAZAKI Logo */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <img
-            src="/yazaki-logo.jpeg"
+            src="/bom-management/yazaki-logo.jpeg"
             alt="YAZAKI Logo"
             style={{
               height: isMobile ? 36 : 40,

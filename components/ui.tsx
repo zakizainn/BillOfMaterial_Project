@@ -451,7 +451,7 @@ export function SidebarHeader({ children }: { children: ReactNode }) {
       padding: '20px 16px', borderBottom: `1px solid ${tokens.border}`,
       display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
     }}>
-      <img src="/yazaki-logo.jpeg" alt="YAZAKI Logo" style={{
+      <img src="/bom-management/yazaki-logo.jpeg" alt="YAZAKI Logo" style={{
               height: 38, objectFit: 'contain', flexShrink: 0,
       }} />
       <div style={{ flex: 1, minWidth: 0 }}>

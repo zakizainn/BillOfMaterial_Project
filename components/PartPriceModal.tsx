@@ -1,3 +1,5 @@
+// components/PartPriceModal.tsx
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -62,7 +64,7 @@ export default function PartPriceModal({ periode, role, onClose }: {
     setLoading(true);
     try {
       const res  = await fetch(
-        `/api/part-price?periode=${encodeURIComponent(periode)}&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}&filter=${f}`
+        `/bom-management/api/part-price?periode=${encodeURIComponent(periode)}&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}&filter=${f}`
       );
       const data = await res.json();
       setRows(data.rows ?? []);
@@ -111,7 +113,7 @@ export default function PartPriceModal({ periode, role, onClose }: {
     try {
       const saveRows = Object.entries(priceMap)
         .map(([part_no, val]) => ({ part_no, price: val !== '' ? parseFloat(val) : null }));
-      const res = await fetch('/api/part-price', {
+      const res = await fetch('/bom-management/api/part-price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ periode, rows: saveRows }),
@@ -127,7 +129,7 @@ export default function PartPriceModal({ periode, role, onClose }: {
   // Download — ambil semua data dari server
   const handleDownload = async () => {
     try {
-      const res  = await fetch(`/api/part-price?periode=${encodeURIComponent(periode)}&download=true`);
+      const res  = await fetch(`/bom-management/api/part-price?periode=${encodeURIComponent(periode)}&download=true`);
       const data = await res.json();
       const allRows: PriceRow[] = data.rows ?? [];
 

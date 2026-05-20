@@ -1,3 +1,5 @@
+// app/page.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -110,14 +112,14 @@ export default function Home() {
         currentPage={page}
         onPageChange={(newPage) => {
           if (newPage === 'report') {
-            window.location.href = '/report';
+            window.location.href = '/bom-management/report';
           } else {
             setPage(newPage);
 
           }
         }}
         isMobile={isMobile}
-        onLogout={() => signOut({ callbackUrl: '/login' })}
+        onLogout={() => signOut({ callbackUrl: '/bom-management/login' })}
         />
       </div>
 
@@ -189,7 +191,7 @@ export default function Home() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {/* Logo at top-right (moved from sidebar) */}
             <img
-              src="/yazaki-logo.jpeg"
+              src="/bom-management/yazaki-logo.jpeg"
               alt="YAZAKI Logo"
               style={{
                 height: 48,
