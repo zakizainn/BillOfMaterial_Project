@@ -1,3 +1,5 @@
+// components/MasterPartPage.tsx
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -57,7 +59,7 @@ function UploadModal({ onClose, onSuccess, showToast }: {
     setLoading(true);
     let ok = 0, fail = 0;
     for (const row of preview) {
-      try { const res = await fetch('/api/part', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) }); if (res.ok) ok++; else fail++; }
+      try { const res = await fetch('/bom-management/api/part', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) }); if (res.ok) ok++; else fail++; }
       catch { fail++; }
     }
     setLoading(false);
@@ -185,7 +187,7 @@ export default function MasterPartPage({ showToast, role }: {
 
   const fetchData = () => {
     setLoading(true);
-    fetch('/api/part').then(r => r.json()).then(d => { setData(d); setLoading(false); })
+    fetch('/bom-management/api/part').then(r => r.json()).then(d => { setData(d); setLoading(false); })
       .catch(() => { showToast('Gagal memuat data Part', 'error'); setLoading(false); });
   };
   useEffect(() => { fetchData(); }, []);
@@ -199,7 +201,7 @@ export default function MasterPartPage({ showToast, role }: {
 
   const handleAdd = async (form: Partial<Part>) => {
     try {
-      const res = await fetch('/api/part', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const res = await fetch('/bom-management/api/part', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const created = await res.json();
       setData(d => [...d, created]); setModal(null); showToast('Part berhasil ditambahkan', 'success');
     } catch { showToast('Gagal menambah Part', 'error'); }
@@ -207,7 +209,7 @@ export default function MasterPartPage({ showToast, role }: {
 
   const handleEdit = async (form: Partial<Part>) => {
     try {
-      const res = await fetch(`/api/part/${form.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const res = await fetch(`/bom-management/api/part/${form.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const updated = await res.json();
       setData(d => d.map(r => r.id === updated.id ? updated : r)); setModal(null); showToast('Part berhasil diperbarui', 'success');
     } catch { showToast('Gagal memperbarui Part', 'error'); }
@@ -217,7 +219,7 @@ export default function MasterPartPage({ showToast, role }: {
 
   const handleDeleteBulk = async () => {
     try {
-      await Promise.all([...selected].map(id => fetch(`/api/part/${id}`, { method: 'DELETE' })));
+      await Promise.all([...selected].map(id => fetch(`/bom-management/api/part/${id}`, { method: 'DELETE' })));
       setData(d => d.filter(r => !selected.has(r.id)));
       showToast(`${selected.size} Part berhasil dihapus`, 'success');
       setSelected(new Set()); setConfirmBulk(false);
