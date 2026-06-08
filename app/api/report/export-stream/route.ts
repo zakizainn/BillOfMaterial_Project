@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import ExcelJS from 'exceljs';
 
-const BATCH_SIZE = 1000; // naikkan dari 500 → 1000
+const BATCH_SIZE = 1000;
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,16 +17,20 @@ export async function GET(request: NextRequest) {
     const p1 = mode === 'gabungan' ? dari   : periode;
     const p2 = mode === 'gabungan' ? sampai : periode;
 
-    // Fetch semua data paralel
-    const [periodeRes, assyRes, prodRes, partsRes, qtyRes] = await Promise.all([
-      mode === 'gabungan'
-        ? pool.query(
-            `SELECT DISTINCT periode FROM mv_bom_gabungan
-             WHERE periode >= $1 AND periode <= $2 ORDER BY periode`,
-            [p1, p2]
-          )
-        : Promise.resolve({ rows: [{ periode }] }),
+    // ── Query aggregate — semua kalkulasi di PostgreSQL ──────────────────────
+    //
+    // Untuk mode gabungan (multi-periode):
+    //   - 1 kolom per ASSY (bukan × periode)
+    //   - qty_per_unit  = qty dari bom_detail (sama semua periode, ambil MAX)
+    //   - prod_qty      = SUM prod_qty semua periode per ASSY
+    //   - total_usage   = CEIL(SUM(qty_per_unit × prod_qty per periode))
+    //
+    // Untuk mode single (1 periode):
+    //   - sama, tapi hanya 1 periode → SUM = nilai periode itu sendiri
+    // ─────────────────────────────────────────────────────────────────────────
 
+    const [assyRes, partsRes, qtyAggRes] = await Promise.all([
+      // 1. Daftar ASSY yang ada di BOM periode ini
       pool.query(
         hasAssyFilter
           ? `SELECT DISTINCT assy_code FROM mv_bom_gabungan
@@ -37,24 +41,19 @@ export async function GET(request: NextRequest) {
         hasAssyFilter ? [p1, p2, assyFilter] : [p1, p2]
       ),
 
-      pool.query(
-        `SELECT assy_code, periode, COALESCE(prod_qty, 0) AS prod_qty
-         FROM prod_plan WHERE periode >= $1 AND periode <= $2`,
-        [p1, p2]
-      ),
-
+      // 2. Daftar part unik + price terbaru
       pool.query(
         hasAssyFilter
           ? `SELECT DISTINCT m.part_no, m.part_no_as400, m.supplier_name, m.part_name, m.unit,
-                    (SELECT pp.price FROM part_price pp 
-                     WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2 
+                    (SELECT pp.price FROM part_price pp
+                     WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2
                      ORDER BY pp.periode DESC LIMIT 1) AS price
              FROM mv_bom_gabungan m
              WHERE m.periode >= $1 AND m.periode <= $2 AND m.assy_code = ANY($3::text[])
              ORDER BY m.part_no`
           : `SELECT DISTINCT m.part_no, m.part_no_as400, m.supplier_name, m.part_name, m.unit,
-                    (SELECT pp.price FROM part_price pp 
-                     WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2 
+                    (SELECT pp.price FROM part_price pp
+                     WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2
                      ORDER BY pp.periode DESC LIMIT 1) AS price
              FROM mv_bom_gabungan m
              WHERE m.periode >= $1 AND m.periode <= $2
@@ -62,80 +61,78 @@ export async function GET(request: NextRequest) {
         hasAssyFilter ? [p1, p2, assyFilter] : [p1, p2]
       ),
 
+      // 3. Aggregate qty per (part_no, assy_code) — semua periode digabung
+      //    qty_per_unit  : MAX (harusnya sama tiap periode, ambil MAX untuk safety)
+      //    prod_qty_sum  : SUM prod_qty semua periode untuk ASSY ini
+      //    total_usage   : CEIL(SUM(qty_per_unit × prod_qty)) per periode, lalu dijumlah
       pool.query(
         hasAssyFilter
-          ? `SELECT part_no, assy_code, periode, qty_per_unit
-             FROM mv_bom_gabungan
-             WHERE periode >= $1 AND periode <= $2 AND assy_code = ANY($3::text[])`
-          : `SELECT part_no, assy_code, periode, qty_per_unit
-             FROM mv_bom_gabungan
-             WHERE periode >= $1 AND periode <= $2`,
+          ? `SELECT
+               m.part_no,
+               m.assy_code,
+               MAX(m.qty_per_unit)                              AS qty_per_unit,
+               COALESCE(SUM(pp.prod_qty), 0)                   AS prod_qty_sum,
+               CEIL(SUM(m.qty_per_unit * COALESCE(pp.prod_qty, 0))) AS total_usage
+             FROM mv_bom_gabungan m
+             LEFT JOIN prod_plan pp
+               ON pp.assy_code = m.assy_code
+              AND pp.periode   = m.periode
+              AND pp.sequence  IS NULL
+             WHERE m.periode >= $1 AND m.periode <= $2
+               AND m.assy_code = ANY($3::text[])
+             GROUP BY m.part_no, m.assy_code`
+          : `SELECT
+               m.part_no,
+               m.assy_code,
+               MAX(m.qty_per_unit)                              AS qty_per_unit,
+               COALESCE(SUM(pp.prod_qty), 0)                   AS prod_qty_sum,
+               CEIL(SUM(m.qty_per_unit * COALESCE(pp.prod_qty, 0))) AS total_usage
+             FROM mv_bom_gabungan m
+             LEFT JOIN prod_plan pp
+               ON pp.assy_code = m.assy_code
+              AND pp.periode   = m.periode
+              AND pp.sequence  IS NULL
+             WHERE m.periode >= $1 AND m.periode <= $2
+             GROUP BY m.part_no, m.assy_code`,
         hasAssyFilter ? [p1, p2, assyFilter] : [p1, p2]
       ),
     ]);
 
-    const periodeList: string[] = periodeRes.rows
-      .map((r: { periode: string | null }) => r.periode || '').filter(Boolean);
-    const assyCodes: string[] = assyRes.rows
-      .map((r: { assy_code: string | null }) => r.assy_code || '').filter(Boolean);
+    const assyCodes: string[] = assyRes.rows.map((r: { assy_code: string }) => r.assy_code);
     const parts      = partsRes.rows;
     const totalParts = parts.length;
 
-    // Build lookup maps O(n) sekali saja
-    const prodMap = new Map<string, number>();
-    for (const r of prodRes.rows)
-      prodMap.set(`${r.assy_code}|${r.periode}`, Number(r.prod_qty));
+    // ── Build lookup maps ────────────────────────────────────────────────────
+    // prodQtySum per assy_code (untuk row PROD QTY)
+    const prodQtyMap = new Map<string, number>();
+    // qty_per_unit per (part_no|assy_code)
+    const qtyMap     = new Map<string, number>();
+    // total_usage per (part_no|assy_code)
+    const usageMap   = new Map<string, number>();
 
-    // Gunakan Float32Array untuk qty — 4x lebih hemat memory dari Map<string,number>
-    // Key encoding: partIdx * colCount + colIdx
-    type ColDef = { assy: string; per: string; prodQty: number };
-    const cols: ColDef[] = [];
-    if (mode === 'gabungan') {
-      for (const assy of assyCodes)
-        for (const per of periodeList)
-          cols.push({ assy, per, prodQty: prodMap.get(`${assy}|${per}`) ?? 0 });
-    } else {
-      for (const assy of assyCodes)
-        cols.push({ assy, per: periode!, prodQty: prodMap.get(`${assy}|${periode!}`) ?? 0 });
+    for (const r of qtyAggRes.rows) {
+      const key = `${r.part_no}|${r.assy_code}`;
+      qtyMap.set(key, Number(r.qty_per_unit));
+      usageMap.set(key, Number(r.total_usage));
+      // prodQtySum sama untuk semua part dalam 1 assy — set sekali
+      if (!prodQtyMap.has(r.assy_code))
+        prodQtyMap.set(r.assy_code, Number(r.prod_qty_sum));
     }
 
-    // Build string-key Map untuk lookup cepat
-    // Format key berbeda untuk mode gabungan vs single (sama dengan halaman report)
-    const qtyMap = new Map<string, number>();
-    for (const r of qtyRes.rows) {
-      if (mode === 'gabungan') {
-        qtyMap.set(`${r.part_no}|${r.assy_code}|${r.periode}`, Number(r.qty_per_unit));
-      } else {
-        // Mode single: key tanpa periode, sama seperti di halaman report
-        qtyMap.set(`${r.part_no}|${r.assy_code}`, Number(r.qty_per_unit));
-      }
-    }
-
-    // Pre-compute prodQty array untuk akses O(1) tanpa object lookup
-    const prodQtyArr = new Float64Array(cols.length);
-    for (let i = 0; i < cols.length; i++)
-      prodQtyArr[i] = cols[i].prodQty;
-
-    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    // Pre-build suffix keys per kolom (hindari concat di inner loop)
+    const colSuffixes: string[] = assyCodes.map(a => `|${a}`);
+    const colCount = assyCodes.length;
 
     const stream = new ReadableStream({
       async start(controller) {
-        // Cek cancel signal di awal
-        if (request.signal.aborted) {
-          controller.close();
-          return;
-        }
+        if (request.signal.aborted) { controller.close(); return; }
 
         try {
           const { Writable } = await import('stream');
 
           const writableStream = new Writable({
             write(chunk: Buffer, _enc, cb) {
-              // Cek cancel setiap chunk
-              if (request.signal.aborted) {
-                cb(new Error('Cancelled'));
-                return;
-              }
+              if (request.signal.aborted) { cb(new Error('Cancelled')); return; }
               controller.enqueue(new Uint8Array(chunk));
               cb();
             },
@@ -145,62 +142,41 @@ export async function GET(request: NextRequest) {
           const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
             stream: writableStream,
             useStyles: false,
-            useSharedStrings: false,
+            useSharedStrings: true,
+            zip: { zlib: { level: 6 } }, // level 6 — balance antara speed & size
           });
 
           const ws = workbook.addWorksheet('Report');
           const baseHeaders = ['Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit'];
 
-          if (mode === 'gabungan') {
-            // Row 1: assy headers
-            const row1: (string | number)[] = [...baseHeaders];
-            for (const assy of assyCodes)
-              for (let i = 0; i < periodeList.length; i++) row1.push(assy);
-            row1.push('Price', 'Total', 'Total Usage');
-            ws.addRow(row1).commit();
+          // ── Header row: base + ASSY codes + summary cols ──────────────────
+          ws.addRow([
+            ...baseHeaders,
+            ...assyCodes,
+            'Price',
+            'Total BOM',
+            'Total Usage',
+          ]).commit();
 
-            // Row 2: periode sub-headers
-            const row2: (string | number)[] = new Array(5).fill('');
-            for (const _assy of assyCodes)
-              for (const per of periodeList) {
-                const [y, m] = per.split('-').map(Number);
-                row2.push(`${MONTHS[m - 1]} ${y}`);
-              }
-            row2.push('', '', '');
-            ws.addRow(row2).commit();
+          // ── PROD QTY row (SUM semua periode per ASSY) ────────────────────
+          const prodRow: (string | number)[] = ['PROD QTY (SUM) →', '', '', '', ''];
+          for (const assy of assyCodes)
+            prodRow.push(prodQtyMap.get(assy) ?? 0);
+          prodRow.push('', '', '');
+          ws.addRow(prodRow).commit();
 
-            // Row 3: prod qty
-            const row3: (string | number)[] = ['PROD QTY →', '', '', '', ''];
-            for (let i = 0; i < cols.length; i++) row3.push(prodQtyArr[i]);
-            row3.push('', '', '');
-            ws.addRow(row3).commit();
-
-          } else {
-            ws.addRow([...baseHeaders, ...assyCodes, 'Price', 'Total', 'Total Usage']).commit();
-            const prodRow: (string | number)[] = ['PROD QTY →', '', '', '', ''];
-            for (let i = 0; i < cols.length; i++) prodRow.push(prodQtyArr[i]);
-            prodRow.push('', '', '');
-            ws.addRow(prodRow).commit();
-          }
-
-          // ── Data rows — optimasi inner loop ──
-          const colCount = cols.length;
-
-          // Array untuk menyimpan total per kolom (untuk footer TOTAL PER ASSY)
-          const colSums = new Float64Array(colCount);
+          // ── Data rows ────────────────────────────────────────────────────
+          const colSums  = new Float64Array(colCount); // total qty per ASSY (footer)
           let grandTotalUsage = 0;
 
           for (let i = 0; i < parts.length; i += BATCH_SIZE) {
-            // Cek cancel setiap batch
             if (request.signal.aborted) break;
 
-            const end   = Math.min(i + BATCH_SIZE, parts.length);
-            const batch = parts.slice(i, end);
+            const batch = parts.slice(i, Math.min(i + BATCH_SIZE, parts.length));
 
             for (const part of batch) {
               const pno = part.part_no;
 
-              // Pre-allocate row array sekali
               const row: (string | number)[] = [
                 pno,
                 part.part_no_as400 || '',
@@ -209,53 +185,41 @@ export async function GET(request: NextRequest) {
                 part.unit          || '',
               ];
 
-              let totalBom = 0;
+              let totalBom   = 0;
               let totalUsage = 0;
 
-              // Inner loop — akses array langsung, hindari object property lookup
               for (let ci = 0; ci < colCount; ci++) {
-                const col = cols[ci];
-                // Key format berbeda untuk mode gabungan vs single (sama dengan halaman report)
-                const key = mode === 'gabungan'
-                  ? `${pno}|${col.assy}|${col.per}`
-                  : `${pno}|${col.assy}`;
-                const qty = qtyMap.get(key) ?? 0;
+                const key   = pno + colSuffixes[ci];
+                const qty   = qtyMap.get(key)   ?? 0;
+                const usage = usageMap.get(key)  ?? 0;
                 row.push(qty);
                 totalBom   += qty;
-                totalUsage += qty * prodQtyArr[ci]; // array akses lebih cepat dari col.prodQty
-                // Footer: hanya akumulasi jika qty > 0 (sama dengan logika di halaman report)
-                if (qty > 0) {
-                  colSums[ci] += qty;
-                }
+                totalUsage += usage;
+                if (qty > 0) colSums[ci] += qty;
               }
 
-              const usageRounded = Math.ceil(totalUsage);
-              row.push(part.price != null ? Number(part.price) : '');
-              row.push(totalBom, usageRounded);
-              grandTotalUsage += usageRounded;
+              grandTotalUsage += Math.ceil(totalUsage);
+              row.push(
+                part.price != null ? Number(part.price) : '',
+                totalBom,
+                Math.ceil(totalUsage),
+              );
               ws.addRow(row).commit();
             }
 
-            // Yield ke event loop tiap batch agar tidak block & bisa detect cancel
             await new Promise(resolve => setImmediate(resolve));
           }
 
-          // ── Footer row: TOTAL PER ASSY ──
-          // colSums berisi jumlah qty komponen per kolom ASSY (tanpa melibatkan prod qty)
-          // grandTotalUsage adalah penjumlahan dari kolom TOTAL USAGE setiap baris
+          // ── Footer: TOTAL PER ASSY ────────────────────────────────────────
           if (!request.signal.aborted) {
             const footerRow: (string | number)[] = ['∑ TOTAL PER ASSY', '', '', '', ''];
-            for (let ci = 0; ci < colCount; ci++) {
+            for (let ci = 0; ci < colCount; ci++)
               footerRow.push(colSums[ci] > 0 ? colSums[ci] : '—');
-            }
-            // Kolom Price dikosongkan, Total BOM dikosongkan, kolom Total Usage diisi grandTotalUsage
             footerRow.push('—', '—', grandTotalUsage > 0 ? grandTotalUsage : '—');
             ws.addRow(footerRow).commit();
           }
 
-          if (!request.signal.aborted) {
-            await workbook.commit();
-          }
+          if (!request.signal.aborted) await workbook.commit();
 
         } catch (err: unknown) {
           if (err instanceof Error && err.message === 'Cancelled') {
@@ -267,28 +231,23 @@ export async function GET(request: NextRequest) {
       },
 
       cancel() {
-        // ReadableStream cancel dipanggil saat client disconnect
-        console.log('[Export] Stream cancelled by client');
+        console.log('[Export Aggregate] Stream cancelled by client');
       }
-    });
-
-    // Propagate abort signal ke stream
-    request.signal.addEventListener('abort', () => {
-      // Signal sudah di-handle di dalam stream via request.signal.aborted checks
     });
 
     return new NextResponse(stream, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="report_${p1}_${p2}.xlsx"`,
+        'Content-Disposition': `attachment; filename="report_aggregate_${p1}_${p2}.xlsx"`,
         'X-Total-Parts': String(totalParts),
-        'X-Total-Cols':  String(cols.length),
+        'X-Total-Cols':  String(colCount),
+        'X-Mode':        'aggregate',
       },
     });
 
   } catch (error) {
-    console.error('[Export] Error:', error);
+    console.error('[Export Aggregate] Error:', error);
     return NextResponse.json(
       { error: 'Export failed', message: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import * as XLSX from 'xlsx';
 import pool from '@/lib/db';
 
 // GET /api/report?periode=2026-06&page=1&limit=50&search=
 // GET /api/report?dari=2026-01&sampai=2026-12&assy_codes=A1,A2&page=1&limit=50&search=
-// GET /api/report?...&download=true  → download Excel (.xlsx dengan styling & merged cells)
+// GET /api/report?...&download=true  → download Excel (via export-stream)
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +12,6 @@ export async function GET(request: Request) {
     const dari       = url.searchParams.get('dari');
     const sampai     = url.searchParams.get('sampai');
     const assyFilter = url.searchParams.get('assy_codes');
-    const download   = url.searchParams.get('download') === 'true';
     const page       = parseInt(url.searchParams.get('page')  || '1');
     const limit      = parseInt(url.searchParams.get('limit') || '50');
     const search     = url.searchParams.get('search') || '';
@@ -36,7 +34,7 @@ export async function GET(request: Request) {
     const hasSearch     = search.trim().length > 0;
     const searchParam   = hasSearch ? `%${search.trim()}%` : null;
 
-    // ─── HELPER: build WHERE clauses ─────────────────────────────
+    // ── HELPER: build WHERE clauses ──────────────────────────────
     function buildWhere(periodeClause: string, paramOffset: number) {
       const clauses: string[] = [periodeClause];
       const params: (string | string[] | number)[] = [];
@@ -55,11 +53,13 @@ export async function GET(request: Request) {
       return { where: clauses.join(' AND '), extraParams: params, nextIdx: idx };
     }
 
-    // ── FOOTER MODE — agregasi ringan, tanpa kirim semua rows ──────
-    if (isFooter) {
-      const p1 = isGabungan ? dari! : periode!;
-      const p2 = isGabungan ? sampai! : periode!;
+    const p1 = isGabungan ? dari! : periode!;
+    const p2 = isGabungan ? sampai! : periode!;
 
+    // ── FOOTER MODE ───────────────────────────────────────────────
+    // Untuk gabungan: aggregate SUM col_sum dan prod_qty_sum per assy_code (tanpa periode)
+    // Untuk single: sama seperti sebelumnya
+    if (isFooter) {
       const params: unknown[] = [p1, p2];
       let idx = 3;
       const extraClauses: string[] = [];
@@ -74,353 +74,142 @@ export async function GET(request: Request) {
       }
 
       const whereExtra = extraClauses.length ? ` AND ${extraClauses.join(' AND ')}` : '';
-      const selectPeriode = isGabungan ? ', periode' : '';
-      const groupBy = isGabungan ? 'assy_code, periode' : 'assy_code';
 
-      // Satu query agregasi — jauh lebih ringan dari fetch semua rows
-      const result = await pool.query(
-        `SELECT assy_code${selectPeriode}, SUM(qty_per_unit)::numeric AS col_sum
-        FROM mv_bom_gabungan
-        WHERE periode >= $1 AND periode <= $2${whereExtra}
-        GROUP BY ${groupBy}
-        ORDER BY assy_code`,
-        params
-      );
-
-      // Prod qty untuk hitung total usage di footer
-      const prodResult = await pool.query(
-        `SELECT assy_code, periode, COALESCE(prod_qty, 0) AS prod_qty
-        FROM prod_plan WHERE periode >= $1 AND periode <= $2`,
-        [p1, p2]
-      );
-
-      return NextResponse.json({
-        col_sums: result.rows,
-        prod_map: prodResult.rows,
-      });
-    }
-
-
-    // ─── DOWNLOAD MODE ────────────────────────────────────────────
-    // Format: XLSX dengan merged cells (menggunakan struktur dari file teman)
-    if (download) {
-      const [p1, p2] = isGabungan ? [dari!, sampai!] : [periode!, periode!];
-
-      // Run all queries in parallel for faster processing
-      const [periodeRes, assyRes, prodRes] = await Promise.all([
-        isGabungan
-          ? pool.query(
-              `SELECT DISTINCT periode FROM mv_bom_gabungan
-               WHERE periode >= $1 AND periode <= $2 ORDER BY periode`,
-              [p1, p2]
-            )
-          : Promise.resolve({ rows: [{ periode: periode! }] }),
-        // ASSY codes
-        pool.query(
-          hasAssyFilter
-            ? `SELECT DISTINCT assy_code FROM mv_bom_gabungan
-               WHERE periode >= $1 AND periode <= $2 AND assy_code = ANY($3::text[])
-               ORDER BY assy_code`
-            : `SELECT DISTINCT assy_code FROM mv_bom_gabungan
-               WHERE periode >= $1 AND periode <= $2 ORDER BY assy_code`,
-          hasAssyFilter ? [p1, p2, assyParams] : [p1, p2]
-        ),
-        // Prod qty
-        pool.query(
-          `SELECT assy_code, periode, COALESCE(prod_qty, 0) AS prod_qty
-           FROM prod_plan WHERE periode >= $1 AND periode <= $2`,
-          [p1, p2]
-        ),
-      ]);
-
-      const periodeList = periodeRes.rows.map((r: { periode: string }) => r.periode);
-      const assyCodes: string[] = assyRes.rows.map((r: { assy_code: string }) => r.assy_code);
-      
-      // Build prod map from results
-      const prodMap: Record<string, Record<string, number>> = {};
-      for (const r of prodRes.rows) {
-        if (!prodMap[r.assy_code]) prodMap[r.assy_code] = {};
-        prodMap[r.assy_code][r.periode] = Number(r.prod_qty);
-      }
-
-      // Get parts and qty data in parallel
-      const { where: pw, extraParams: pe } = buildWhere(
-        `periode >= $1 AND periode <= $2`, 3
-      );
-      
-      const [partsRes, qtyRes] = await Promise.all([
-        pool.query(
-          `SELECT DISTINCT m.part_no, m.part_no_as400, m.part_name, m.unit, m.supplier_name,
-                  (SELECT pp.price FROM part_price pp 
-                   WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2 
-                   ORDER BY pp.periode DESC LIMIT 1) AS price
-           FROM mv_bom_gabungan m
-           WHERE ${pw.replace(/part_no/g, 'm.part_no').replace(/part_name/g, 'm.part_name').replace(/periode/g, 'm.periode').replace(/assy_code/g, 'm.assy_code')} ORDER BY m.part_no`,
-          [p1, p2, ...pe]
-        ),
-        pool.query(
-          hasAssyFilter
-            ? `SELECT part_no, assy_code, periode, qty_per_unit
-               FROM mv_bom_gabungan
-               WHERE periode >= $1 AND periode <= $2
-                 AND assy_code = ANY($3::text[])`
-            : `SELECT part_no, assy_code, periode, qty_per_unit
-               FROM mv_bom_gabungan
-               WHERE periode >= $1 AND periode <= $2`,
-          hasAssyFilter ? [p1, p2, assyParams] : [p1, p2]
-        ),
-      ]);
-      
-      const partNos: string[] = partsRes.rows.map((r: { part_no: string }) => r.part_no);
-
-      // 5. Build lookup map O(n)
-      const lookup = new Map<string, number>();
-      for (const r of qtyRes.rows) {
-        lookup.set(`${r.part_no}|${r.assy_code}|${r.periode}`, Number(r.qty_per_unit));
-      }
-
-      const wb = XLSX.utils.book_new();
-
-      // ── MODE GABUNGAN DOWNLOAD ─────────────────────────────────
       if (isGabungan) {
-        const baseHeaders   = ['Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit'];
-        const baseColCount  = baseHeaders.length;
-        const periodesPerAssy = periodeList.length;
+        // Aggregate: col_sum per assy_code (SUM semua periode, tanpa GROUP BY periode)
+        const result = await pool.query(
+          `SELECT m.assy_code, SUM(m.qty_per_unit)::numeric AS col_sum
+           FROM mv_bom_gabungan m
+           WHERE m.periode >= $1 AND m.periode <= $2${whereExtra}
+           GROUP BY m.assy_code
+           ORDER BY m.assy_code`,
+          params
+        );
 
-        // Row 1: ASSY names (di-repeat sebanyak jumlah periode), lalu Price, Total & Total Usage
-        const row1: string[] = [...baseHeaders];
-        for (const assy of assyCodes) {
-          for (let i = 0; i < periodesPerAssy; i++) {
-            row1.push(assy);
-          }
-        }
-        row1.push('Price');
-        row1.push('Total');
-        row1.push('Total Usage');
+        // prod_qty_sum per assy_code
+        const prodResult = await pool.query(
+          `SELECT assy_code, COALESCE(SUM(prod_qty), 0) AS prod_qty_sum
+           FROM prod_plan
+           WHERE periode >= $1 AND periode <= $2 AND sequence IS NULL
+           GROUP BY assy_code`,
+          [p1, p2]
+        );
 
-        // Row 2: Sub-header periode per ASSY (format: "Mar 2026")
-        const row2: string[] = new Array(baseColCount).fill('');
-        for (const _assy of assyCodes) {
-          for (const per of periodeList) {
-            const [y, m] = per.split('-').map(Number);
-            const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
-            row2.push(`${month} ${y}`);
-          }
-        }
-        row2.push(''); // Price
-        row2.push(''); // Total
-        row2.push(''); // Total Usage
+        return NextResponse.json({
+          col_sums: result.rows,
+          prod_map: prodResult.rows,
+        });
+      } else {
+        // Single: sama seperti sebelumnya
+        const result = await pool.query(
+          `SELECT assy_code, SUM(qty_per_unit)::numeric AS col_sum
+           FROM mv_bom_gabungan
+           WHERE periode >= $1 AND periode <= $2${whereExtra}
+           GROUP BY assy_code
+           ORDER BY assy_code`,
+          params
+        );
 
-        // Row 3: PROD QTY row
-        const row3: (string | number)[] = ['PROD QTY →', '', '', '', ''];
-        for (const assy of assyCodes) {
-          for (const per of periodeList) {
-            row3.push(prodMap[assy]?.[per] ?? 0);
-          }
-        }
-        row3.push(''); // Price
-        row3.push(''); // Total
-        row3.push(''); // Total Usage
+        const prodResult = await pool.query(
+          `SELECT assy_code, COALESCE(prod_qty, 0) AS prod_qty
+           FROM prod_plan WHERE periode = $1 AND sequence IS NULL`,
+          [p1]
+        );
 
-        // Rows 4+: Data part
-        const data: (string | number)[][] = [row1, row2, row3];
-        for (const part of partsRes.rows) {
-          const row: (string | number)[] = [
-            part.part_no,
-            part.part_no_as400  || '',
-            part.supplier_name  || '',
-            part.part_name      || '',
-            part.unit           || '',
-          ];
-
-          let totalBom   = 0;
-          let totalUsage = 0;
-          for (const assy of assyCodes) {
-            for (const per of periodeList) {
-              const qty = lookup.get(`${part.part_no}|${assy}|${per}`) ?? 0;
-              row.push(qty);
-              totalBom   += qty;
-              totalUsage += qty * (prodMap[assy]?.[per] ?? 0);
-            }
-          }
-          row.push(part.price != null ? Number(part.price) : '');
-          row.push(totalBom);
-          row.push(Math.ceil(totalUsage));
-          data.push(row);
-        }
-
-        const ws = XLSX.utils.aoa_to_sheet(data);
-
-        // Merge ASSY header cells di row 1
-        const merges: XLSX.Range[] = [];
-        let colIdx = baseColCount;
-        for (const _assy of assyCodes) {
-          merges.push({
-            s: { r: 0, c: colIdx },
-            e: { r: 0, c: colIdx + periodesPerAssy - 1 },
-          });
-          colIdx += periodesPerAssy;
-        }
-        ws['!merges'] = merges;
-
-        // Column widths
-        ws['!cols'] = [
-          { wch: 15 }, // Part No
-          { wch: 18 }, // Part No AS400
-          { wch: 25 }, // Supplier
-          { wch: 30 }, // Part Name
-          { wch: 10 }, // Unit
-          ...assyCodes.flatMap(() => periodeList.map(() => ({ wch: 12 }))),
-          { wch: 12 }, // Price
-          { wch: 12 }, // Total
-          { wch: 12 }, // Total Usage
-        ];
-
-        XLSX.utils.book_append_sheet(wb, ws, `Combined_${dari}_${sampai}`);
-
-        const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
-        return new Response(buffer, {
-          headers: {
-            'Content-Type':        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition': `attachment; filename="report_${dari}_${sampai}.xlsx"`,
-          },
+        return NextResponse.json({
+          col_sums: result.rows,
+          prod_map: prodResult.rows,
         });
       }
-
-      // ── SINGLE PERIODE DOWNLOAD ────────────────────────────────
-      // Flat prodMap untuk single periode: { assy_code: qty }
-      const flatProdMap: Record<string, number> = {};
-      for (const assy of assyCodes) {
-        flatProdMap[assy] = prodMap[assy]?.[periode!] ?? 0;
-      }
-
-      const headers     = ['Part No', 'Part No AS400', 'Supplier', 'Part Name', 'Unit', ...assyCodes, 'Price', 'Total BOM', 'Total Usage'];
-      const prodQtyRow  = ['PROD QTY →', '', '', '', '', ...assyCodes.map(a => flatProdMap[a] ?? 0), '', '', ''];
-      const data: (string | number)[][] = [headers, prodQtyRow];
-
-      for (const part of partsRes.rows) {
-        const row: (string | number)[] = [
-          part.part_no,
-          part.part_no_as400  || '',
-          part.supplier_name  || '',
-          part.part_name      || '',
-          part.unit           || '',
-          ...assyCodes.map(a => lookup.get(`${part.part_no}|${a}|${periode!}`) ?? 0),
-        ];
-        const totalBom   = assyCodes.reduce((s, a) => s + (lookup.get(`${part.part_no}|${a}|${periode!}`) ?? 0), 0);
-        const totalUsage = assyCodes.reduce((s, a) => s + ((lookup.get(`${part.part_no}|${a}|${periode!}`) ?? 0) * (flatProdMap[a] ?? 0)), 0);
-        row.push(part.price != null ? Number(part.price) : '');
-        row.push(totalBom);
-        row.push(Math.ceil(totalUsage));
-        data.push(row);
-      }
-
-      const ws = XLSX.utils.aoa_to_sheet(data);
-      ws['!cols'] = [
-        { wch: 15 }, // Part No
-        { wch: 18 }, // Part No AS400
-        { wch: 25 }, // Supplier
-        { wch: 30 }, // Part Name
-        { wch: 10 }, // Unit
-        ...assyCodes.map(() => ({ wch: 12 })),
-        { wch: 12 }, // Price
-        { wch: 12 }, // Total BOM
-        { wch: 12 }, // Total Usage
-      ];
-
-      XLSX.utils.book_append_sheet(wb, ws, `Report_${periode}`);
-      const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
-      return new Response(buffer, {
-        headers: {
-          'Content-Type':        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment; filename="report_${periode}.xlsx"`,
-        },
-      });
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // MODE GABUNGAN (non-download) — query dari mv_bom_gabungan
+    // MODE GABUNGAN (non-download) — AGGREGATE
+    // qty_map: part_no → assy_code → qty  (flat, tanpa nested periode)
+    // prod_qty_map: assy_code → prod_qty_sum (SUM semua periode)
     // ═══════════════════════════════════════════════════════════════
     if (isGabungan) {
-      const periodeResult = await pool.query(
-        `SELECT DISTINCT periode FROM mv_bom_gabungan
-         WHERE periode >= $1 AND periode <= $2 ORDER BY periode`,
-        [dari, sampai]
-      );
-      const periodeList: string[] = periodeResult.rows.map((r: { periode: string }) => r.periode);
-
       const assyQuery = hasAssyFilter
         ? `SELECT DISTINCT assy_code FROM mv_bom_gabungan
            WHERE periode >= $1 AND periode <= $2 AND assy_code = ANY($3::text[])
            ORDER BY assy_code`
         : `SELECT DISTINCT assy_code FROM mv_bom_gabungan
            WHERE periode >= $1 AND periode <= $2 ORDER BY assy_code`;
-      const assyRes   = await pool.query(assyQuery, hasAssyFilter ? [dari, sampai, assyParams] : [dari, sampai]);
+      const assyRes   = await pool.query(assyQuery, hasAssyFilter ? [p1, p2, assyParams] : [p1, p2]);
       const assyCodes: string[] = assyRes.rows.map((r: { assy_code: string }) => r.assy_code);
 
+      // prod_qty_sum per assy_code (SUM semua periode)
       const prodRes = await pool.query(
-        `SELECT assy_code, periode, COALESCE(prod_qty, 0) AS prod_qty
-         FROM prod_plan WHERE periode >= $1 AND periode <= $2`,
-        [dari, sampai]
+        `SELECT assy_code, COALESCE(SUM(prod_qty), 0) AS prod_qty_sum
+         FROM prod_plan
+         WHERE periode >= $1 AND periode <= $2 AND sequence IS NULL
+         GROUP BY assy_code`,
+        [p1, p2]
       );
-      const prodMap: Record<string, Record<string, number>> = {};
+      // prod_qty_map: { assy_code: prod_qty_sum } — flat, bukan nested per periode
+      const prodQtyMap: Record<string, number> = {};
       for (const r of prodRes.rows) {
-        if (!prodMap[r.assy_code]) prodMap[r.assy_code] = {};
-        prodMap[r.assy_code][r.periode] = Number(r.prod_qty);
+        prodQtyMap[r.assy_code] = Number(r.prod_qty_sum);
       }
 
+      // Count total parts
       const { where: countWhere, extraParams: countExtra } = buildWhere(
         'periode >= $1 AND periode <= $2', 3
       );
       const countResult = await pool.query(
         `SELECT COUNT(DISTINCT part_no) FROM mv_bom_gabungan WHERE ${countWhere}`,
-        [dari, sampai, ...countExtra]
+        [p1, p2, ...countExtra]
       );
       const totalParts = Number(countResult.rows[0].count);
 
+      // Parts list (paginated)
       const { where: partsWhere, extraParams: partsExtra, nextIdx } = buildWhere(
         'periode >= $1 AND periode <= $2', 3
       );
       const partsResult = await pool.query(
         `SELECT DISTINCT m.part_no, m.part_no_as400, m.part_name, m.unit, m.supplier_name,
-                (SELECT pp.price FROM part_price pp 
-                 WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2 
+                (SELECT pp.price FROM part_price pp
+                 WHERE pp.part_no = m.part_no AND pp.periode >= $1 AND pp.periode <= $2
                  ORDER BY pp.periode DESC LIMIT 1) AS price
          FROM mv_bom_gabungan m
          WHERE ${partsWhere.replace(/part_no/g, 'm.part_no').replace(/part_name/g, 'm.part_name').replace(/periode/g, 'm.periode').replace(/assy_code/g, 'm.assy_code')}
          ORDER BY m.part_no LIMIT $${nextIdx} OFFSET $${nextIdx + 1}`,
-        [dari, sampai, ...partsExtra, limit, offset]
+        [p1, p2, ...partsExtra, limit, offset]
       );
       const partNos: string[] = partsResult.rows.map((r: { part_no: string }) => r.part_no);
 
+      // qty_map AGGREGATE: MAX qty_per_unit per (part_no, assy_code) semua periode
+      // MAX dipakai karena qty_per_unit harusnya sama tiap periode (by design BOM)
       const qtyResult = await pool.query(
         hasAssyFilter
-          ? `SELECT part_no, assy_code, periode, qty_per_unit
+          ? `SELECT part_no, assy_code, MAX(qty_per_unit) AS qty_per_unit
              FROM mv_bom_gabungan
              WHERE periode >= $1 AND periode <= $2
-               AND part_no = ANY($3) AND assy_code = ANY($4::text[])`
-          : `SELECT part_no, assy_code, periode, qty_per_unit
+               AND part_no = ANY($3) AND assy_code = ANY($4::text[])
+             GROUP BY part_no, assy_code`
+          : `SELECT part_no, assy_code, MAX(qty_per_unit) AS qty_per_unit
              FROM mv_bom_gabungan
-             WHERE periode >= $1 AND periode <= $2 AND part_no = ANY($3)`,
-        hasAssyFilter ? [dari, sampai, partNos, assyParams] : [dari, sampai, partNos]
+             WHERE periode >= $1 AND periode <= $2 AND part_no = ANY($3)
+             GROUP BY part_no, assy_code`,
+        hasAssyFilter ? [p1, p2, partNos, assyParams] : [p1, p2, partNos]
       );
 
-      const qtyMap: Record<string, Record<string, Record<string, number>>> = {};
+      // qty_map: { part_no: { assy_code: qty } } — FLAT (tanpa nested periode)
+      const qtyMap: Record<string, Record<string, number>> = {};
       for (const row of qtyResult.rows) {
-        if (!qtyMap[row.part_no])                qtyMap[row.part_no] = {};
-        if (!qtyMap[row.part_no][row.assy_code]) qtyMap[row.part_no][row.assy_code] = {};
-        qtyMap[row.part_no][row.assy_code][row.periode] = Number(row.qty_per_unit);
+        if (!qtyMap[row.part_no]) qtyMap[row.part_no] = {};
+        qtyMap[row.part_no][row.assy_code] = Number(row.qty_per_unit);
       }
 
       const gabunganKey = `${dari}_${sampai}`;
       return NextResponse.json({
-        periodes: periodeList,
+        periodes: [],            // tidak dipakai di aggregate mode
         results: {
           [gabunganKey]: {
             assy_codes:   assyCodes,
-            prod_qty_map: prodMap,
+            prod_qty_map: prodQtyMap,  // flat: { assy_code: prod_qty_sum }
             parts:        partsResult.rows,
-            qty_map:      qtyMap,
+            qty_map:      qtyMap,      // flat: { part_no: { assy_code: qty } }
             total_parts:  totalParts,
             page,
             limit,
@@ -430,7 +219,7 @@ export async function GET(request: Request) {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // MODE SINGLE PERIODE (non-download) — query dari mv_bom_gabungan
+    // MODE SINGLE PERIODE (tidak berubah)
     // ═══════════════════════════════════════════════════════════════
     const per = periode!;
 
@@ -443,7 +232,8 @@ export async function GET(request: Request) {
     const assyCodes: string[] = assyRes.rows.map((r: { assy_code: string }) => r.assy_code);
 
     const prodRes = await pool.query(
-      `SELECT assy_code, COALESCE(prod_qty, 0) AS prod_qty FROM prod_plan WHERE periode = $1`,
+      `SELECT assy_code, COALESCE(prod_qty, 0) AS prod_qty
+       FROM prod_plan WHERE periode = $1 AND sequence IS NULL`,
       [per]
     );
     const prodMap: Record<string, number> = {};
