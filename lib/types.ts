@@ -1,4 +1,4 @@
-// Types
+// lib/types.ts
 export interface Assy {
   id: number;
   assy_code: string;

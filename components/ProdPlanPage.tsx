@@ -1,3 +1,5 @@
+// components/ProdPlanPage.tsx
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -50,7 +52,7 @@ export default function ProdPlanPage({ showToast, role }: {
   const fetchPeriodes = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/prod-plan');
+      const res = await fetch('/bom-management/api/prod-plan');
       const data = await res.json();
       setPeriodes(data);
     } catch { showToast('Gagal memuat data', 'error'); }
@@ -63,7 +65,7 @@ export default function ProdPlanPage({ showToast, role }: {
     setDetailLoading(true);
     setSearch('');
     try {
-      const res  = await fetch(`/api/prod-plan/${encodeURIComponent(periode)}`);
+      const res  = await fetch(`/bom-management/api/prod-plan/${encodeURIComponent(periode)}`);
       const data = await res.json() as AssyRow[];
       setAssyRows(data);
       // Init editMap dari data yang sudah ada
@@ -99,7 +101,7 @@ export default function ProdPlanPage({ showToast, role }: {
         assy_code: r.assy_code,
         prod_qty:  editMap[getKey(r.assy_code)] ?? 0,
       }));
-      const res  = await fetch(`/api/prod-plan/${encodeURIComponent(selectedPeriode)}`, {
+      const res  = await fetch(`/bom-management/api/prod-plan/${encodeURIComponent(selectedPeriode)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows }),

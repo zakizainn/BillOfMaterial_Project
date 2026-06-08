@@ -1,3 +1,4 @@
+// components/BomDetailModal.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -39,7 +40,7 @@ export default function BomDetailModal({ periode, onClose }: { periode: string; 
   const fetchList = useCallback(async (p: number, s: string) => {
     setListLoading(true);
     try {
-      const res  = await fetch(`/api/bom/${encodeURIComponent(periode)}?mode=list&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}`);
+      const res  = await fetch(`/bom-management/api/bom/${encodeURIComponent(periode)}?mode=list&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}`);
       const data = await res.json();
       setListRows(data.rows); setListTotal(data.total);
     } catch { /* ignore */ }
@@ -49,7 +50,7 @@ export default function BomDetailModal({ periode, onClose }: { periode: string; 
   const fetchPivot = useCallback(async (p: number, s: string) => {
     setPivotLoading(true);
     try {
-      const res  = await fetch(`/api/bom/${encodeURIComponent(periode)}?mode=pivot&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}`);
+      const res  = await fetch(`/bom-management/api/bom/${encodeURIComponent(periode)}?mode=pivot&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}`);
       const data = await res.json();
       setAssyCodes(data.assy_codes); setPivotParts(data.parts);
       setQtyMap(data.qty_map); setPivotTotal(data.total);

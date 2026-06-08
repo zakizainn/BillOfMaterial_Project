@@ -1,3 +1,4 @@
+// app/login/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -17,7 +18,7 @@ export default function LoginPage() {
     setLoading(true); setError('');
     const res = await signIn('credentials', { username, password, redirect: false });
     if (res?.ok) {
-      window.location.href = '/';
+      window.location.href = '/bom-management';
     } else {
       setError('Username atau password salah');
       setLoading(false);
@@ -128,7 +129,7 @@ export default function LoginPage() {
             animation: 'fadeInLeft .6s ease .1s backwards',
           }}>
             <img
-              src="/yazaki-logo.jpeg"
+              src="/bom-management/yazaki-logo.jpeg"
               alt="YAZAKI Logo"
               style={{ 
                 height: 72, 

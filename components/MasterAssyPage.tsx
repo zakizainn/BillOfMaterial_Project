@@ -1,3 +1,5 @@
+// components/MasterAssyPage.tsx
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -65,7 +67,7 @@ function UploadModal({ onClose, onSuccess, showToast }: {
     setLoading(true);
     let ok = 0, fail = 0;
     for (const row of preview) {
-      try { const res = await fetch('/api/assy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) }); if (res.ok) ok++; else fail++; }
+      try { const res = await fetch('/bom-management/api/assy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) }); if (res.ok) ok++; else fail++; }
       catch { fail++; }
     }
     setLoading(false);
@@ -207,7 +209,7 @@ export default function MasterAssyPage({ showToast, role }: {
 
   const fetchData = () => {
     setLoading(true);
-    fetch('/api/assy').then(r => r.json()).then(d => { setData(d); setLoading(false); })
+    fetch('/bom-management/api/assy').then(r => r.json()).then(d => { setData(d); setLoading(false); })
       .catch(() => { showToast('Gagal memuat data ASSY', 'error'); setLoading(false); });
   };
   useEffect(() => { fetchData(); }, []);
@@ -217,7 +219,7 @@ export default function MasterAssyPage({ showToast, role }: {
 
   const handleAdd = async (form: Partial<Assy>) => {
     try {
-      const res = await fetch('/api/assy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const res = await fetch('/bom-management/api/assy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const created = await res.json();
       setData(d => [...d, created]); setModal(null); showToast('ASSY berhasil ditambahkan', 'success');
     } catch { showToast('Gagal menambah ASSY', 'error'); }
@@ -225,7 +227,7 @@ export default function MasterAssyPage({ showToast, role }: {
 
   const handleEdit = async (form: Partial<Assy>) => {
     try {
-      const res = await fetch(`/api/assy/${form.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const res = await fetch(`/bom-management/api/assy/${form.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const updated = await res.json();
       setData(d => d.map(r => r.id === updated.id ? updated : r)); setModal(null); showToast('ASSY berhasil diperbarui', 'success');
     } catch { showToast('Gagal memperbarui ASSY', 'error'); }
@@ -235,7 +237,7 @@ export default function MasterAssyPage({ showToast, role }: {
 
   const handleDeleteBulk = async () => {
     try {
-      await Promise.all([...selected].map(id => fetch(`/api/assy/${id}`, { method: 'DELETE' })));
+      await Promise.all([...selected].map(id => fetch(`/bom-management/api/assy/${id}`, { method: 'DELETE' })));
       setData(d => d.filter(r => !selected.has(r.id)));
       showToast(`${selected.size} ASSY berhasil dihapus`, 'success');
       setSelected(new Set()); setConfirmBulk(false);
@@ -245,7 +247,7 @@ export default function MasterAssyPage({ showToast, role }: {
   const handleToggleStatus = async () => {
     setTogglingStatus(true);
     try {
-      const res  = await fetch('/api/assy/bulk-status', {
+      const res  = await fetch('/bom-management/api/assy/bulk-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: [...selected] }),

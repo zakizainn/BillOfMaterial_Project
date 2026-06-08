@@ -1,3 +1,5 @@
+// components/MasterBomPage.tsx
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -134,7 +136,7 @@ function UploadModal({ onClose, onSuccess, showToast }: {
       // Step 1: validasi dulu dengan mengirim hanya part_no & assy_code unik
       const uniqueParts = [...new Set(parsed.rows.map(r => r.part_no))];
       const uniqueAssy  = [...new Set(parsed.rows.map(r => r.assy_code))];
-      const validateRes = await fetch('/api/bom/validate', {
+      const validateRes = await fetch('/bom-management/api/bom/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ periode, part_nos: uniqueParts, assy_codes: uniqueAssy }),
@@ -157,7 +159,7 @@ function UploadModal({ onClose, onSuccess, showToast }: {
       for (let i = 0; i < rows.length; i += BATCH) {
         const batch = rows.slice(i, i + BATCH);
         const isFirst = i === 0;
-        const res = await fetch('/api/bom', {
+        const res = await fetch('/bom-management/api/bom', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ periode, rows: batch, skipValidation: true, isFirst }),
@@ -295,14 +297,14 @@ export default function MasterBomPage({ showToast, role }: {
 
   const fetchData = () => {
     setLoading(true);
-    fetch('/api/bom').then(r => r.json()).then(d => { setPeriodes(d); setLoading(false); })
+    fetch('/bom-management/api/bom').then(r => r.json()).then(d => { setPeriodes(d); setLoading(false); })
       .catch(() => { showToast('Gagal memuat data BOM', 'error'); setLoading(false); });
   };
   useEffect(() => { fetchData(); }, []);
 
   const handleDelete = async (periode: string) => {
     try {
-      const res  = await fetch(`/api/bom/${encodeURIComponent(periode)}`, { method: 'DELETE' });
+      const res  = await fetch(`/bom-management/api/bom/${encodeURIComponent(periode)}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) { showToast(data.error, 'error'); return; }
       showToast(`Periode ${periode} berhasil dihapus`, 'success');

@@ -1,3 +1,5 @@
+// components/TotalUsageModal.tsx
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -56,7 +58,7 @@ export default function TotalUsageModal({ onClose, availablePeriodes }: {
   // Load daftar ASSY untuk picker (mode gabungan)
   const loadAssyCodes = useCallback(async () => {
     if (!dari || !sampai) return;
-    const res  = await fetch(`/api/bom/gabungan?dari=${dari}&sampai=${sampai}&mode=pivot&page=1&limit=1`);
+    const res  = await fetch(`/bom-management/api/bom/gabungan?dari=${dari}&sampai=${sampai}&mode=pivot&page=1&limit=1`);
     const data = await res.json();
     setAllAssyCodes(data.assy_codes ?? []);
   }, [dari, sampai]);
@@ -68,10 +70,10 @@ export default function TotalUsageModal({ onClose, availablePeriodes }: {
     try {
       let url = '';
       if (mode === 'single') {
-        url = `/api/total-usage?periode=${encodeURIComponent(periode)}`;
+        url = `/bom-management/api/total-usage?periode=${encodeURIComponent(periode)}`;
       } else {
         const assyParam = selectedAssy.size > 0 ? `&assy_codes=${[...selectedAssy].join(',')}` : '';
-        url = `/api/total-usage?dari=${dari}&sampai=${sampai}${assyParam}`;
+        url = `/bom-management/api/total-usage?dari=${dari}&sampai=${sampai}${assyParam}`;
       }
       const res  = await fetch(url);
       const data = await res.json();

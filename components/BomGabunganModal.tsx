@@ -1,3 +1,5 @@
+// components/BomGabunganModal.tsx
+
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -269,7 +271,7 @@ export default function BomGabunganModal({
 
   // ── Fetch helpers ─────────────────────────────────────────
   const buildUrl = (mode: string, p: number, s: string) =>
-    `/api/bom/gabungan?dari=${dari}&sampai=${sampai}&mode=${mode}&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}`;
+    `/bom-management/api/bom/gabungan?dari=${dari}&sampai=${sampai}&mode=${mode}&page=${p}&limit=${LIMIT}&search=${encodeURIComponent(s)}`;
 
   const fetchList = useCallback(async (p: number, s: string) => {
     setListLoading(true);
