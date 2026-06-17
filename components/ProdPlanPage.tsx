@@ -1,8 +1,6 @@
-// components/ProdPlanPage.tsx
-
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import * as XLSX from 'xlsx';
 
 const font = "'DM Sans', system-ui, sans-serif";
@@ -22,20 +20,21 @@ interface PeriodeStat {
 
 interface AssyRow {
   assy_code: string;
-  sequence: number | null;   // selalu NULL di operasional
+  sequence: number | null;
   description: string;
   carline: string | null;
   destinasi: string | null;
   komoditi: string | null;
   prod_qty: number;
   updated_at: string | null;
-  variants?: string[];        // list carline dari semua sequence di master_assy
 }
 
-export default function ProdPlanPage({ showToast, role }: {
+export default forwardRef(function ProdPlanPage({ showToast, role, onDetailChange }: {
   showToast: (msg: string, type: 'success' | 'error') => void;
   role: string;
-}) {
+  onDetailChange?: (isDetail: boolean, periode?: string) => void;
+}, ref) {
+
   const canEdit = role === 'FINANCE';
 
   const [periodes,      setPeriodes]      = useState<PeriodeStat[]>([]);
@@ -48,6 +47,16 @@ export default function ProdPlanPage({ showToast, role }: {
   const [search,        setSearch]        = useState('');
   const [isDirty,       setIsDirty]       = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Notify parent when entering/exiting detail view
+  useEffect(() => {
+    onDetailChange?.(!!selectedPeriode, selectedPeriode || undefined);
+  }, [selectedPeriode, onDetailChange]);
+
+  // Expose reset method to parent via ref
+  useImperativeHandle(ref, () => ({
+    resetDetail: () => setSelectedPeriode(null),
+  }), []);
 
   const fetchPeriodes = async () => {
     setLoading(true);
@@ -70,8 +79,9 @@ export default function ProdPlanPage({ showToast, role }: {
       setAssyRows(data);
       // Init editMap dari data yang sudah ada
       const map: Record<string, number> = {};
-      data.forEach(r => {
-        map[getKey(r.assy_code)] = Number(r.prod_qty) || 0;
+      data.forEach(r => { 
+        const key = `${r.assy_code}__${r.sequence ?? 'null'}`;
+        map[key] = Number(r.prod_qty) || 0; 
       });
       setEditMap(map);
       setIsDirty(false);
@@ -84,12 +94,13 @@ export default function ProdPlanPage({ showToast, role }: {
     fetchDetail(periode);
   };
 
-  // Arsitektur final: key cukup assy_code saja, sequence selalu NULL di operasional
-  const getKey = (assy_code: string) => assy_code;
+  const getKey = (assy_code: string, sequence: number | null) => 
+    `${assy_code}__${sequence ?? 'null'}`;
 
-  const handleQtyChange = (assy_code: string, val: string) => {
+  const handleQtyChange = (assy_code: string, sequence: number | null, val: string) => {
     const num = parseFloat(val) || 0;
-    setEditMap(m => ({ ...m, [getKey(assy_code)]: num }));
+    const key = getKey(assy_code, sequence);
+    setEditMap(m => ({ ...m, [key]: num }));
     setIsDirty(true);
   };
 
@@ -99,7 +110,8 @@ export default function ProdPlanPage({ showToast, role }: {
     try {
       const rows = assyRows.map(r => ({
         assy_code: r.assy_code,
-        prod_qty:  editMap[getKey(r.assy_code)] ?? 0,
+        sequence:  r.sequence ?? null,
+        prod_qty:  editMap[getKey(r.assy_code, r.sequence)] ?? 0,
       }));
       const res  = await fetch(`/bom-management/api/prod-plan/${encodeURIComponent(selectedPeriode)}`, {
         method: 'POST',
@@ -129,9 +141,11 @@ export default function ProdPlanPage({ showToast, role }: {
       let count = 0;
       for (const row of rows) {
         const assy_code = String(row['assy_code'] ?? row['ASSY CODE'] ?? row['Assy Code'] ?? '').trim();
+        const sequence  = row['sequence'] != null && row['sequence'] !== '' ? Number(row['sequence']) : null;
         const prod_qty  = parseFloat(String(row['prod_qty'] ?? row['PROD QTY'] ?? row['Prod Qty'] ?? '0')) || 0;
-        if (assy_code) {
-          newMap[getKey(assy_code)] = prod_qty; count++;
+        if (assy_code) { 
+          const key = getKey(assy_code, sequence);
+          newMap[key] = prod_qty; count++; 
         }
       }
       setEditMap(newMap);
@@ -147,12 +161,12 @@ export default function ProdPlanPage({ showToast, role }: {
     const wb = XLSX.utils.book_new();
     const data = assyRows.map(r => ({
       assy_code:   r.assy_code,
+      sequence:    r.sequence ?? '',
       carline:     r.carline || '',
       destinasi:   r.destinasi || '',
       komoditi:    r.komoditi || '',
       description: r.description || '',
-      variants:    r.variants?.join(', ') || '',
-      prod_qty:    editMap[getKey(r.assy_code)] ?? 0,
+      prod_qty:    editMap[getKey(r.assy_code, r.sequence)] ?? 0,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     ws['!cols'] = [{ wch: 35 }, { wch: 30 }, { wch: 12 }];
@@ -166,19 +180,24 @@ export default function ProdPlanPage({ showToast, role }: {
     (r.carline ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const filledCount  = assyRows.filter(r => (editMap[getKey(r.assy_code)] ?? 0) > 0).length;
+  const filledCount  = assyRows.filter(r => (editMap[getKey(r.assy_code, r.sequence)] ?? 0) > 0).length;
   const totalProdQty = Object.values(editMap).reduce((s, v) => s + (v || 0), 0);
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ fontFamily: font }}>
-      {/* Role banner */}
+      {/* Role banner - ALWAYS show */}
       <div style={{
         background: canEdit ? '#fef2f2' : '#fffbeb',
         border: `1px solid ${canEdit ? '#fecaca' : '#fde68a'}`,
-        borderRadius: 10, padding: '10px 16px', marginBottom: 20,
-        fontSize: 13, color: canEdit ? '#dc2626' : '#92400e',
-        display: 'flex', alignItems: 'center', gap: 8,
+        borderRadius: 10, 
+        padding: '10px 16px', 
+        marginBottom: 20,
+        fontSize: 13, 
+        color: canEdit ? '#dc2626' : '#92400e',
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: 8,
       }}
         dangerouslySetInnerHTML={{ __html: canEdit
           ? '💰 Role <b>FINANCE</b> — dapat mengisi Prod Qty per ASSY per periode.'
@@ -250,12 +269,6 @@ export default function ProdPlanPage({ showToast, role }: {
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button onClick={() => setSelectedPeriode(null)} style={{
-                background: '#f3f4f6', border: 'none', borderRadius: 8,
-                padding: '7px 14px', cursor: 'pointer', fontSize: 13,
-                fontWeight: 600, color: '#6b7280', fontFamily: font,
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}>← Kembali</button>
               <div>
                 <h1 style={{ fontSize: 20, fontWeight: 700, color: '#111827', margin: 0 }}>
                   Prod Plan — {formatPeriode(selectedPeriode)}
@@ -324,14 +337,14 @@ export default function ProdPlanPage({ showToast, role }: {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: font }}>
                 <thead>
                   <tr style={{ background: '#f8fafc' }}>
-                    {['No','Assy Code','Variants','Status','Prod Qty'].map((h, i) => (
-                      <th key={h} style={{ padding: '11px 14px', textAlign: 'left', fontWeight: 600, fontSize: 11.5, color: '#6b7280', borderBottom: '1px solid #e8eaed', whiteSpace: 'nowrap' }}>{h}</th>
+                    {['No','Assy Code','Seq','Carline','Destinasi','Komoditi','Status','Prod Qty'].map((h, i) => (
+                      <th key={h} style={{ padding: '11px 14px', textAlign: i === 4 ? 'right' : 'left', fontWeight: 600, fontSize: 11.5, color: '#6b7280', borderBottom: '1px solid #e8eaed', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((r, i) => {
-                    const qty    = editMap[getKey(r.assy_code)] ?? 0;
+                    const qty    = editMap[getKey(r.assy_code, r.sequence)] ?? 0;
                     const filled = qty > 0;
                     return (
                       <tr key={r.assy_code} style={{ borderBottom: '1px solid #f1f5f9' }}
@@ -339,15 +352,13 @@ export default function ProdPlanPage({ showToast, role }: {
                         onMouseOut={e =>  (e.currentTarget.style.background = '')}>
                         <td style={{ padding: '10px 14px', color: '#9ca3af', fontSize: 12 }}>{i + 1}</td>
                         <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: 12.5, color: '#1d4ed8', fontWeight: 700 }}>{r.assy_code}</td>
-                        <td style={{ padding: '10px 14px' }}>
-                          {r.variants && r.variants.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                              {r.variants.map((v, vi) => (
-                                <span key={vi} style={{ background: '#f0f9ff', color: '#0369a1', borderRadius: 4, padding: '1px 7px', fontSize: 10.5, fontWeight: 600, border: '1px solid #bae6fd' }}>{v}</span>
-                              ))}
-                            </div>
-                          ) : <span style={{ color: '#d1d5db' }}>—</span>}
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          {r.sequence != null ? <span style={{ background: '#eff6ff', color: '#2563eb', borderRadius: 5, padding: '2px 8px', fontSize: 11.5, fontWeight: 700 }}>{r.sequence}</span> : <span style={{ color: '#d1d5db' }}>—</span>}
                         </td>
+                        <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12.5 }}>{r.carline || '—'}</td>
+                        <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12.5 }}>{r.destinasi || '—'}</td>
+                        <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12.5 }}>{r.komoditi || '—'}</td>
+                        <td style={{ padding: '10px 14px', color: '#4b5563' }}>{r.description || '—'}</td>
                         <td style={{ padding: '10px 14px' }}>
                           <span style={{
                             background: filled ? '#dcfce7' : '#fee2e2',
@@ -355,20 +366,18 @@ export default function ProdPlanPage({ showToast, role }: {
                             borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 600,
                           }}>{filled ? '✓ Terisi' : '✗ Kosong'}</span>
                         </td>
-                        <td style={{ padding: '8px 14px' }}>
+                        <td style={{ padding: '8px 14px', textAlign: 'right' }}>
                           {canEdit ? (
                             <input
                               type="number" min="0" value={qty === 0 ? '' : qty}
                               placeholder="0"
-                              onChange={e => handleQtyChange(r.assy_code, e.target.value)}
+                              onChange={e => handleQtyChange(r.assy_code, r.sequence, e.target.value)}
                               style={{
-                                width: '100%', maxWidth: 160, padding: '7px 12px',
-                                borderRadius: 8, textAlign: 'left',
+                                width: 110, padding: '6px 10px', borderRadius: 7, textAlign: 'right',
                                 border: `1.5px solid ${filled ? '#bbf7d0' : '#e2e8f0'}`,
                                 fontSize: 13, fontFamily: font, outline: 'none',
                                 background: filled ? '#f0fdf4' : '#fff',
                                 fontWeight: filled ? 700 : 400,
-                                display: 'block',
                               }}
                               onFocus={e => { e.target.style.borderColor = '#3b82f6'; e.target.style.background = '#eff6ff'; }}
                               onBlur={e =>  { e.target.style.borderColor = filled ? '#bbf7d0' : '#e2e8f0'; e.target.style.background = filled ? '#f0fdf4' : '#fff'; }}
@@ -407,7 +416,7 @@ export default function ProdPlanPage({ showToast, role }: {
       )}
     </div>
   );
-}
+});
 
 function LoadingBox() {
   return (

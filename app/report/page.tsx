@@ -1013,7 +1013,7 @@ function ReportContent() {
             src="/bom-management/yazaki-logo.jpeg"
             alt="YAZAKI Logo"
             style={{
-              height: isMobile ? 36 : 40,
+              height: 48,
               width: 'auto',
               objectFit: 'contain',
               opacity: 1,
